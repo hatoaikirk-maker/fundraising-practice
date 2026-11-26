@@ -1,0 +1,6 @@
+# 練習資料、上傳的檔案、套件：不上傳到 repo
+data/
+node_modules/
+*.log
+.DS_Store
+repo_url.txt

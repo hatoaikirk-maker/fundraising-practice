@@ -1,0 +1,20 @@
+# Render.com 一鍵部署設定（Blueprint）
+# 在 Render 選「New → Blueprint」、連到這個 GitHub repo，就會照這份設定開一台免費主機
+# 注意：免費方案 15 分鐘沒人用會休眠（第一次開要等 30～60 秒）；主機重開，練習資料會回到範例資料（本來就是練習用，沒關係）
+services:
+  - type: web
+    name: fundraising-practice
+    runtime: node
+    plan: free
+    buildCommand: echo "不用安裝任何套件"
+    startCommand: node server.js
+    healthCheckPath: /api/me
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: SECURE_COOKIE
+        value: "1"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: NODE_VERSION
+        value: "20"
