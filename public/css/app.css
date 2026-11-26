@@ -356,3 +356,13 @@ input.sm { min-height: 36px; padding: 4px 8px; width: 110px; } input.qty { width
 .pick { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; min-height: 40px; }
 .pick small { color: var(--mute); } .pick:has(input:checked) { border-color: var(--ac); background: var(--ac-soft); }
 @media (max-width: 700px) { .acc-grid { grid-template-columns: 1fr; } .acc-s { display: none; } }
+/* 計畫管理：一列式（短一半） */
+.pitem { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 10px 14px; }
+.pitem-img { width: 96px; aspect-ratio: 16/9; object-fit: cover; border-radius: 6px; background: var(--soft); }
+.pitem-info { gap: 2px; } .pitem-l1 { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.pitem-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .98rem; }
+.pitem-meta { font-size: .84rem; } .pitem-actions { display: flex; gap: 6px; align-items: center; margin: 0; padding: 0; border: 0; }
+.pitem-actions .more { min-height: 36px; padding: 4px 8px; font-size: .88rem; }
+.plist { gap: 8px; }
+.small-tabs { margin-bottom: 12px; } .small-tabs .tab { min-height: 40px; padding: 8px 14px; }
+@media (max-width: 700px) { .pitem { grid-template-columns: 72px minmax(0, 1fr); } .pitem-img { width: 72px; } .pitem-actions { grid-column: 1 / -1; } }

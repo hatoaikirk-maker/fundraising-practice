@@ -10,9 +10,10 @@ import { h, link, go, api, state, loadMe, toast, act, modal, ask, money, num, dt
 
 // [網址, 名稱, 只有管理員看得到, 只有測試模式才有]
 // 正式模式拿掉：審核流程、檢舉、首頁公告（KIRK 指示）；只留在測試模式（m[3]＝true）給自動測試用
-const MENU = [['', '總覽'], ['messages', '客服訊息'], ['report', '總體報表'], ['ai', 'AI 助理', true], ['projects', '計畫管理'], ['inquiries', '合作申請'], ['orders', '訂單管理'], ['refunds', '退款處理'], ['comments', '留言管理'],
+// KIRK：合作申請、留言管理不放左邊（從總覽的待處理格子點進去）；撥款＋退款合成一個；人員與會員→會員管理
+const MENU = [['', '總覽'], ['messages', '客服訊息'], ['report', '總體報表'], ['ai', 'AI 助理', true], ['projects', '計畫管理'], ['orders', '訂單管理'], ['money', '撥款與退款'],
   ['review', '審核流程', false, true], ['reports', '檢舉處理', false, true], ['notices', '首頁公告', false, true],
-  ['users', '人員與會員', true], ['site', '首頁內容', true], ['payouts', '撥款結算', true], ['settings', '平台設定', true], ['emails', '寄信紀錄', true], ['audit', '操作紀錄', true], ['clock', '時鐘與重置（測試模式）', true, true]];
+  ['users', '會員管理', true], ['site', '首頁內容', true], ['settings', '平台設定', true], ['emails', '寄信紀錄', true], ['audit', '操作紀錄', true], ['clock', '時鐘與重置（測試模式）', true, true]];
 const ROLE_NAMES = { member: '一般會員', staff: '一般人員', admin: '管理員' };
 async function shell(key, content) {
   // 後台只有一個入口：/admin（KIRK：「我要從哪裡登入」）——沒登入就直接在這裡登入，登入後回到這一頁
@@ -44,7 +45,7 @@ route('/admin', async () => shell('', async () => {
   return h('div', {}, h('div', { class: 'row between' }, h('h1', {}, '總覽'), h('span', { class: 'small muted' }, dt(d.now))), d.clockOffset ? h('p', { class: 'warn' }, `時鐘已快轉 ${Math.round(d.clockOffset / 3_600_000)} 小時`) : null,
     h('div', { class: 'kpis' }, [['今日營業額', money(d.todayAmount), `${num(d.todayOrders)} 筆`], ['本月營業額', money(d.monthAmount)], ['累計', money(d.totalAmount)], ['會員', num(d.users)]].map(([k, v, s]) => h('div', { class: 'kpi' }, h('span', {}, k), h('b', {}, v), s ? h('span', {}, s) : null))),
     h('h2', { class: 'h2s' }, '待處理'),
-    h('div', { class: 'todos' }, todo(d.messages, '客服訊息未讀', '/admin/messages', '信眾從「聯繫我們」寄來'), todo(d.refunds, '退款申請', '/admin/refunds?status=pending'), todo(d.inquiries, '新的合作申請', '/admin/inquiries'), todo(d.comments, '留言還沒回覆', '/admin/comments', '近 30 天'), todo(d.unshipped, '已付款未出貨', '/admin/orders?status=paid&real=1'), todo(d.pendingOrders, '待付款訂單', '/admin/orders?status=pending')),
+    h('div', { class: 'todos' }, todo(d.messages, '客服訊息未讀', '/admin/messages', '信眾從「聯繫我們」寄來'), todo(d.refunds, '退款申請', '/admin/money?tab=refund&status=pending'), todo(d.inquiries, '新的合作申請', '/admin/inquiries'), todo(d.comments, '留言還沒回覆', '/admin/comments', '近 30 天'), todo(d.unshipped, '已付款未出貨', '/admin/orders?status=paid&real=1'), todo(d.pendingOrders, '待付款訂單', '/admin/orders?status=pending')),
     h('div', { class: 'grid2' },
       h('section', { class: 'card tight' }, h('h3', {}, '近 7 天營業額'), h('div', { class: 'bars' }, d.last7.map((x) => h('div', { class: 'bar-row' }, h('span', {}, x.day), h('div', { class: 'bar-t' }, h('i', { style: { width: (x.amount / max7 * 100) + '%' } })), h('span', { class: 'tr' }, money(x.amount)))))),
       h('section', { class: 'card tight' }, h('h3', {}, '7 天內結束的專案'), d.ending.length ? h('ul', { class: 'list' }, d.ending.map((p) => h('li', {}, link(`/c/${p.id}`, p.title), h('span', { class: 'muted small' }, '　' + dt(p.endAt, false))))) : h('p', { class: 'muted small' }, '沒有'))));
@@ -89,22 +90,13 @@ route('/admin/projects', async (_, q) => shell('projects', async () => {
   const create = async () => { const type = sel(state.meta.types, 'crowd'), title = inp(''); modal('新增計畫', h('div', {}, field('類型', type), field('計畫名稱', title), h('p', { class: 'small muted' }, '建好後進後台寫內容、方案，再回這裡按「上架」。')), [{ text: '建立', fn: async () => { const r = await act(() => api('/api/start', { type: type.value, title: title.value }), '已建立草稿'); if (r) go(`/c/${r.id}/edit`); return !!r; } }]); };
   return h('div', {}, h('div', { class: 'row between' }, h('h1', {}, '計畫管理'), h('button', { class: 'btn', on: { click: create } }, '＋ 新增計畫')), h('form', { class: 'filters', on: { submit: (e) => { e.preventDefault(); const n = new URLSearchParams(); if (kw.value) n.set('q', kw.value); if (st.value) n.set('status', st.value); go('/admin/projects?' + n.toString()); } } }, kw, st, h('button', { class: 'btn' }, '搜尋')),
     // KIRK：「右邊那一排按鈕放到案子下面，排成一行」→ 每個計畫一張卡：上面資料、下面一排按鈕
-    list.length ? h('div', { class: 'plist' }, list.map((p) => h('article', { class: 'pitem' },
-      h('div', { class: 'pitem-top' },
-        p.cover ? h('img', { src: p.cover, alt: '', class: 'pitem-img' }) : null,
-        h('div', { class: 'pitem-info' },
-          h('div', { class: 'row' }, link('/p/' + p.slug, p.title, 'pitem-title'), badge(p.statusName, p.status), p.featured ? badge('主打') : null, p.staffPick ? badge('精選', 'gold') : null),
-          h('div', { class: 'pitem-meta' }, h('span', {}, '執行人 ', h('b', {}, p.executor || p.owner)), h('span', {}, '負責 ', h('b', {}, p.manager || '—')), h('span', {}, '集資 ', h('b', {}, money(p.raised)), `（${p.percent}%）`), h('span', {}, `${dt(p.startAt, false)}～${p.endAt ? dt(p.endAt, false) : '長期'}`)))),
-      h('div', { class: 'pitem-actions' },
-        link(`/c/${p.id}`, '編輯內容', 'btn sm'),
-        ['draft', 'reviewing'].includes(p.status) ? h('button', { class: 'btn sm', on: { click: () => doA(p, 'publish') } }, '上架') : null,
-        h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'feature') } }, p.featured ? '取消主打' : '首頁主打'),
-        h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'pick') } }, p.staffPick ? '取消精選' : '設為精選'),
-        h('button', { class: 'btn sm ghost', on: { click: () => sched(p) } }, '調整時間'),
-        h('button', { class: 'btn sm ghost', on: { click: () => mgr(p) } }, '指派負責人'),
-        link('/p/' + p.slug, '看前台', 'btn sm ghost'),
-        p.status === 'suspended' ? h('button', { class: 'btn sm', on: { click: () => doA(p, 'restore') } }, '恢復上架') : h('button', { class: 'btn sm danger', on: { click: () => doA(p, 'suspend') } }, '下架'),
-        state.demo && state.me.role === 'admin' && p.steps && p.steps.plan === 'ok' ? h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'unlock') } }, '解鎖時間') : null)))) : h('p', { class: 'muted' }, '找不到計畫'));
+    // KIRK：每個專案太長→一列：小圖｜名稱＋狀態＋數字｜按鈕（常用的直接按，其他收在「更多」）
+    list.length ? h('div', { class: 'plist' }, list.map((p) => { const more = h('select', { class: 'more', 'aria-label': '更多操作', on: { change: (e) => { const v = e.target.value; e.target.value = ''; if (v === 'sched') sched(p); else if (v === 'mgr') mgr(p); else if (v === 'view') go('/p/' + p.slug); else if (v) doA(p, v); } } },
+        h('option', { value: '' }, '更多 ▾'), h('option', { value: 'feature' }, p.featured ? '取消主打' : '首頁主打'), h('option', { value: 'pick' }, p.staffPick ? '取消精選' : '設為精選'), h('option', { value: 'sched' }, '調整時間'), h('option', { value: 'mgr' }, '指派負責人'), h('option', { value: 'view' }, '看前台'), h('option', { value: p.status === 'suspended' ? 'restore' : 'suspend' }, p.status === 'suspended' ? '恢復上架' : '下架'));
+      return h('article', { class: 'pitem' }, p.cover ? h('img', { src: p.cover, alt: '', class: 'pitem-img' }) : h('div', { class: 'pitem-img' }),
+        h('div', { class: 'pitem-info' }, h('div', { class: 'pitem-l1' }, link('/p/' + p.slug, p.title, 'pitem-title'), badge(p.statusName, p.status), p.featured ? badge('主打') : null, p.staffPick ? badge('精選', 'gold') : null),
+          h('div', { class: 'pitem-meta' }, `${p.executor || p.owner}・${money(p.raised)}（${p.percent}%）・${dt(p.startAt, false)}～${p.endAt ? dt(p.endAt, false) : '長期'}`)),
+        h('div', { class: 'pitem-actions' }, link(`/c/${p.id}`, '編輯', 'btn sm'), ['draft', 'reviewing'].includes(p.status) ? h('button', { class: 'btn sm', on: { click: () => doA(p, 'publish') } }, '上架') : null, more)); })) : h('p', { class: 'muted' }, '找不到計畫'));
 }));
 
 // ---------- 訂單管理 ----------
@@ -127,12 +119,24 @@ route('/admin/orders', async (_, q) => shell('orders', async () => {
     h('form', { class: 'filters', on: { submit: (e) => { e.preventDefault(); search(); } } }, pj, st, f, kw, h('button', { class: 'btn' }, '查詢'), h('label', { class: 'field check' }, real, h('span', {}, '只看真實訂單'))),
     d.list.length ? h('div', { class: 'accs' }, d.list.map(row)) : h('p', { class: 'muted' }, '找不到訂單'), pager(d, search));
 }));
-route('/admin/refunds', async (_, q) => shell('refunds', async () => {
+async function refundsView(q, base) {
   const st = q.status ?? '', list = await api('/api/admin/refunds?status=' + encodeURIComponent(st));
   const decide = async (r, decision) => { const note = decision === 'reject' ? await ask('駁回退款', '原因', { multiline: true }) : ''; if (decision === 'reject' && !note) return; if (await act(() => api(`/api/admin/refunds/${r.id}`, { decision, note }))) reload(); };
-  return h('div', {}, h('h1', {}, '退款處理'), h('div', { class: 'row' }, [['', '全部'], ['pending', '申請中'], ['approved', '已退款'], ['rejected', '已駁回']].map(([k, n]) => link('/admin/refunds?status=' + k, n, 'chip' + (st === k ? ' on' : '')))),
-    table(['狀態', '計畫', '訂單', '收件人', '金額', '原因', '時間', ''], list.map((r) => [[badge(r.auto ? '已退款（自行取消）' : r.statusName, r.status)], r.project, r.order, r.recipient, money(r.total), r.reason, dt(r.createdAt), r.status === 'pending' ? h('div', { class: 'row' }, h('button', { class: 'btn sm', on: { click: () => decide(r, 'approve') } }, '同意退款'), h('button', { class: 'btn sm danger', on: { click: () => decide(r, 'reject') } }, '駁回')) : r.note]), '沒有退款申請'));
+  return h('div', {}, h('div', { class: 'row' }, [['', '全部'], ['pending', '申請中'], ['approved', '已退款'], ['rejected', '已駁回']].map(([k, n]) => link(`${base}status=${k}`, n, 'chip' + (st === k ? ' on' : '')))),
+    list.length ? h('div', { class: 'accs' }, list.map((r) => h('details', { class: 'acc' }, h('summary', {}, h('span', { class: 'acc-t' }, badge(r.auto ? '已退款（自行取消）' : r.statusName, r.status), r.order), h('span', { class: 'acc-s' }, `${r.project}・${r.recipient}`), h('b', {}, money(r.total))),
+      h('div', { class: 'acc-b' }, h('div', {}, '原因：' + r.reason), h('div', { class: 'small muted' }, dt(r.createdAt) + (r.note ? '・' + r.note : '')), r.status === 'pending' ? h('div', { class: 'row' }, h('button', { class: 'btn sm', on: { click: () => decide(r, 'approve') } }, '同意退款'), h('button', { class: 'btn sm danger', on: { click: () => decide(r, 'reject') } }, '駁回')) : null)))) : h('p', { class: 'muted' }, '沒有退款紀錄'));
+}
+async function payoutsView() {
+  const list = await api('/api/admin/payouts');
+  return h('div', {}, h('p', { class: 'small muted' }, '一次性專案：完結後 28 個工作日內撥款；訂閱專案：次月 15 日撥款。撥款金額＝集資總額 − 金流服務費 − 平台手續費。'),
+    table(['計畫', '期別', '集資總額', '金流費', '平台費', '撥款金額', '應撥日', '狀態', ''], list.map((x) => [x.project, x.period || '一次性', money(x.gross), money(x.paymentFee), money(x.platformFee), h('b', {}, money(x.net)), dt(x.dueAt, false), x.status === 'paid' ? badge('已撥款', 'ok') : badge('待撥款'), x.status === 'scheduled' ? h('button', { class: 'btn sm', on: { click: async () => { if (await act(() => api(`/api/admin/payouts/${x.id}`, {}), '已標記撥款')) reload(); } } }, '標記已撥款') : '']), '還沒有撥款'));
+}
+route('/admin/money', async (_, q) => shell('money', async () => {
+  const isAdmin = state.me.role === 'admin', tab = isAdmin && q.tab === 'payout' ? 'payout' : 'refund';
+  return h('div', {}, h('h1', {}, '撥款與退款'), h('nav', { class: 'tabs small-tabs' }, link('/admin/money?tab=refund', '退款', 'tab' + (tab === 'refund' ? ' on' : '')), isAdmin ? link('/admin/money?tab=payout', '撥款結算', 'tab' + (tab === 'payout' ? ' on' : '')) : null),
+    tab === 'payout' ? await payoutsView() : await refundsView(q, '/admin/money?tab=refund&'));
 }));
+route('/admin/refunds', async (_, q) => shell('money', async () => h('div', {}, h('h1', {}, '退款處理'), await refundsView(q, '/admin/refunds?'))));
 route('/admin/reports', async () => shell('reports', async () => {
   const list = await api('/api/admin/reports');
   const doA = async (r, action) => { const note = await ask(action === 'resolve' ? '處理檢舉' : '駁回檢舉', '處理說明', { multiline: true }); if (note === undefined) return; const hide = action === 'resolve' && r.kind === 'comment' ? confirm('要隱藏這則留言嗎？') : false; if (await act(() => api(`/api/admin/reports/${r.id}`, { action, note, hide }))) reload(); };
@@ -166,7 +170,7 @@ route('/admin/users', async (_, q) => shell('users', async () => {
   const add = async () => { const r = await act(() => api('/api/admin/users', { email: em.value, name: nm.value, role: rl.value })); if (r) showTemp(em.value, r.tempPassword); };
   const cols = ['名稱', 'Email', '角色', '類型', '付款訂單', '加入', '狀態', '操作'];
   const search = (page = 1) => go('/admin/users?' + qs({ q: kw.value, page }));
-  return h('div', {}, h('h1', {}, '人員與會員'),
+  return h('div', {}, h('h1', {}, '會員管理'),
     h('details', { class: 'acc' }, h('summary', {}, h('span', { class: 'acc-t' }, `平台人員（${d.staff.length}）`), h('span', { class: 'acc-s' }, '點開管理、新增人員')),
       h('div', { class: 'acc-b' }, table(cols, d.staff.map(row)), h('div', { class: 'row' }, em, nm, rl, h('button', { class: 'btn sm', on: { click: add } }, '新增並產生臨時密碼')), h('p', { class: 'small muted' }, '管理員：全部功能。一般人員：計畫、訂單、退款、留言、客服、報表。'))),
     h('div', { class: 'row between' }, h('h2', { class: 'h2s' }, '會員'), h('a', { href: '/api/admin/users.csv', class: 'btn sm ghost', download: '' }, '匯出 Excel（CSV）')),
@@ -237,11 +241,7 @@ route('/admin/site', async () => shell('site', async () => {
     h('section', { class: 'card' }, h('h3', {}, '愛心回饋牆（最多 12 則；請放真實的信眾回饋，沒有就留空，首頁不會顯示這區）'), rows, h('button', { class: 'btn ghost', on: { click: () => { if (wall.length < 12) { wall.push({ tag: '', text: '', who: '' }); draw(); } } } }, '＋ 新增一則')),
     h('button', { class: 'btn big', on: { click: () => act(() => api('/api/admin/site', { about: about.value, wall }), '已儲存') } }, '儲存'));
 }));
-route('/admin/payouts', async () => shell('payouts', async () => {
-  const list = await api('/api/admin/payouts');
-  return h('div', {}, h('h1', {}, '撥款結算'), h('p', { class: 'small muted' }, '一次性專案：完結後 28 個工作日內撥款；訂閱專案：次月 15 日撥款。撥款金額＝集資總額 − 金流服務費（依付款方式）− 平台手續費。'),
-    table(['計畫', '期別', '集資總額', '金流服務費', '平台手續費', '撥款金額', '撥款帳戶', '應撥日', '狀態', ''], list.map((x) => [x.project, x.period || '一次性', money(x.gross), money(x.paymentFee), money(x.platformFee), h('b', {}, money(x.net)), x.bank, dt(x.dueAt, false), x.status === 'paid' ? badge('已撥款 ' + dt(x.paidAt, false), 'ok') : badge('待撥款'), x.status === 'scheduled' ? h('button', { class: 'btn sm', on: { click: async () => { if (await act(() => api(`/api/admin/payouts/${x.id}`, {}), '已標記撥款並通知提案人')) reload(); } } }, '標記已撥款') : '']), '還沒有撥款'));
-}));
+route('/admin/payouts', async () => shell('money', async () => h('div', {}, h('h1', {}, '撥款結算'), await payoutsView())));
 route('/admin/settings', async () => shell('settings', async () => {
   const s = await api('/api/admin/settings');
   const F = { platformFee: inp(s.platformFee, { type: 'number', step: '0.001' }), credit: inp(s.paymentFee.credit, { type: 'number', step: '0.001' }), atm: inp(s.paymentFee.atm, { type: 'number', step: '0.001' }), aftee: inp(s.paymentFee.aftee, { type: 'number', step: '0.001' }),
