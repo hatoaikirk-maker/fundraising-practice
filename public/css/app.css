@@ -327,3 +327,32 @@ input.sm { min-height: 36px; padding: 4px 8px; width: 110px; } input.qty { width
 .pitem-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .88rem; color: var(--mute); } .pitem-meta b { color: var(--ink); }
 .pitem-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 @media (max-width: 600px) { .pitem-top { flex-direction: column; } .pitem-img { width: 100%; } }
+
+/* ---------- 後台：緊湊版（KIRK：「不要留一大堆空白」「資料點擊再出現」）---------- */
+.dash { gap: 20px; margin-top: 16px; }
+.dash-main h1 { font-size: 1.45rem; margin: 0 0 12px; }
+.dash-main .h2s, .dash-main h2 { font-size: 1.05rem; margin: 18px 0 8px; }
+.dash-main .card { padding: 14px 16px; margin: 10px 0; } .card.tight h3 { margin: 0 0 8px; font-size: .98rem; }
+.dash-main .tbl th, .dash-main .tbl td { padding: 7px 10px; } .dash-main .tbl td .row { flex-wrap: nowrap; }
+.dash-main .filters { margin: 6px 0 10px; } .dash-main .filters .field.check { margin: 0; }
+.dash-main .kpis { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; } .dash-main .kpi { padding: 10px 12px; } .kpi span + span { margin-top: 2px; }
+.dash-main .pager { margin: 12px 0; align-items: center; }
+.side-a { min-height: 40px; padding: 8px 12px; }
+.accs { display: flex; flex-direction: column; gap: 6px; }
+.acc { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.acc > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 10px 14px; min-height: 44px; }
+.acc > summary::-webkit-details-marker { display: none; }
+.acc > summary::after { content: "▾"; color: var(--mute); margin-left: 4px; } .acc[open] > summary::after { content: "▴"; }
+.acc[open] > summary { border-bottom: 1px solid var(--line); background: var(--soft); }
+.acc-t { display: flex; align-items: center; gap: 6px; font-weight: 700; white-space: nowrap; }
+.acc-s { flex: 1; min-width: 0; color: var(--mute); font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acc-b { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.acc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.todos { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.todo { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; color: var(--ink); background: #fff; }
+.todo b { font-size: 1.5rem; line-height: 1.2; color: var(--mute); } .todo span { font-weight: 700; } .todo small { color: var(--mute); font-size: .76rem; }
+.todo.hot { border-color: var(--ac); background: var(--ac-soft); } .todo.hot b { color: var(--ac); } .todo:hover { border-color: var(--ink); color: var(--ink); }
+.picks { display: flex; flex-wrap: wrap; gap: 8px; }
+.pick { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; min-height: 40px; }
+.pick small { color: var(--mute); } .pick:has(input:checked) { border-color: var(--ac); background: var(--ac-soft); }
+@media (max-width: 700px) { .acc-grid { grid-template-columns: 1fr; } .acc-s { display: none; } }

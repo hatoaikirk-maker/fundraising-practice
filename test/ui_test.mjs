@@ -112,7 +112,7 @@ try {
   click('.tool', '預覽'); ok(!!W.document.querySelector('.preview .rich'), '編輯器：預覽畫得出來');
   // ---------- 平台後台：每一頁 ----------
   await login('admin@demo.local');
-  for (const [k, word] of [['', '總覽'], ['/review', '提案審核'], ['/projects', '計畫管理'], ['/orders', '訂單管理'], ['/refunds', '退款處理'], ['/reports', '檢舉處理'], ['/comments', '留言管理'], ['/notices', '首頁公告'], ['/users', '人員與會員'], ['/payouts', '撥款結算'], ['/settings', '平台設定'], ['/emails', '寄信紀錄'], ['/audit', '操作紀錄'], ['/clock', '時鐘與重置']]) await visit('/admin' + k, word);
+  for (const [k, word] of [['', '總覽'], ['/review', '提案審核'], ['/projects', '計畫管理'], ['/orders', '訂單管理'], ['/refunds', '退款處理'], ['/reports', '檢舉處理'], ['/comments', '留言管理'], ['/notices', '首頁公告'], ['/users', '人員與會員'], ['/messages', '客服訊息'], ['/report', '選擇專案'], ['/payouts', '撥款結算'], ['/settings', '平台設定'], ['/emails', '寄信紀錄'], ['/audit', '操作紀錄'], ['/clock', '時鐘與重置']]) await visit('/admin' + k, word);
   ok(text().includes('快轉 1 天'), '模擬時鐘：快轉按鈕');
   // 專案經理看不到 admin 限定的選單
   await login('pm@demo.local'); await visit('/admin', '總覽');

@@ -38,6 +38,7 @@ function client() {
     async me() { const r = await c.req('GET', '/api/me'); csrf = r.j.csrf; return r.j; },
     get: (p) => c.req('GET', p), post: (p, b) => c.req('POST', p, b),
     async login(email, password) { await c.me(); const r = await c.post('/api/login', { email, password }); await c.me(); return r; },
+    get cookie() { return cookie; },
   };
   return c;
 }
@@ -157,8 +158,30 @@ try {
   await ad.post('/api/admin/site', { about: '初心', wall: [{ tag: '修廟', text: '很感動', who: '台南陳小姐' }, { text: '', who: '' }] });
   const h3 = (await anon.get('/api/home')).j; ok(h3.about === '初心' && h3.wall.length === 1, '首頁內容：初心、回饋牆（空的丟掉）');
   // ---------- 後台修改（KIRK 六點）----------
-  const rep = await ad.get('/api/admin/report');
-  ok(rep.s === 200 && rep.j.totals.raised > 0 && rep.j.byProject.length >= 4 && rep.j.byMonth.length === 12 && rep.j.topOptions.length > 0, '一、總體報表：總計、各專案、12 個月、熱門方案');
+  const rep0 = await ad.get('/api/admin/report');
+  ok(rep0.s === 200 && !rep0.j.totals && rep0.j.projects.length >= 4, '總體報表：還沒選專案只回專案清單（不一開就全部算）');
+  const ids = rep0.j.projects.slice(0, 2).map((x) => x.id).join(',');
+  const rep = await ad.get('/api/admin/report?ids=' + ids);
+  ok(rep.s === 200 && rep.j.totals.raised > 0 && rep.j.byProject.length === 2 && rep.j.byMonth.length === 12 && rep.j.topOptions.length > 0, '總體報表：複選 2 個專案，只算這 2 個');
+  // 訂單：專案下拉＋分頁
+  const mogaId = rep0.j.projects.find((x) => x.title.includes('大北門')).id;
+  const od = (await ad.get(`/api/admin/orders?project=${mogaId}&page=1`)).j;
+  ok(od.per === 20 && od.list.length <= 20 && od.total >= 30 && od.list.every((o) => o.project.includes('大北門')), '訂單管理：依專案篩選、20 筆一頁');
+  ok((await ad.get(`/api/admin/orders?project=${mogaId}&page=1&real=1`)).j.list.every((o) => !o.fake), '訂單管理：只看真實訂單');
+  // 會員：10 人一頁、匯出
+  const ud = (await ad.get('/api/admin/users?page=1')).j;
+  ok(ud.per === 10 && ud.list.length <= 10 && ud.staff.some((u) => u.role === 'admin') && ud.list.every((u) => u.role === 'member'), '會員：10 人一頁，平台人員另外列');
+  const csvR = await fetch(B + '/api/admin/users.csv', { headers: { cookie: ad.cookie } }); const csvB = Buffer.from(await csvR.arrayBuffer()), csvT = csvB.toString('utf8');
+  ok(csvR.status === 200 && /text\/csv/.test(csvR.headers.get('content-type')) && csvB[0] === 0xef && csvB[1] === 0xbb && csvB[2] === 0xbf && csvT.includes('fan.real@example.com') && !csvT.includes('@demo.local'), '會員匯出 Excel（CSV）：有 BOM、不含虛構贊助人');
+  ok((await (await fresh()).get('/api/admin/users.csv')).s === 401, '會員匯出：沒登入不行');
+  // 客服訊息：信眾從專案頁「聯繫我們」→ 後台看得到、回覆
+  ok((await bk.post('/api/inbox', { slug: 'moga', body: '請問平安燈什麼時候點？' })).s === 200, '信眾從專案頁「聯繫我們」');
+  const ov = (await ad.get('/api/admin/overview')).j;
+  ok(ov.messages >= 1 && ov.last7.length === 7 && typeof ov.monthAmount === 'number' && 'unshipped' in ov && 'inquiries' in ov, '總覽儀表板：營業額、客服未讀、待處理事項');
+  const th = (await ad.get('/api/admin/messages')).j.find((t) => t.list.some((m) => m.body.includes('平安燈')));
+  ok(!!th && th.unread >= 1, '後台「客服訊息」看得到');
+  ok((await ad.post('/api/admin/messages', { userId: th.userId, body: '過年前會點亮喔' })).s === 200, '後台回覆客服訊息');
+  ok((await bk.get('/api/inbox')).j.some((t) => t.last.includes('過年前')) && (await ad.get('/api/admin/overview')).j.messages === 0, '信眾收到回覆；未讀歸零');
   ok((await bk.get('/api/admin/report')).s === 404, '一、一般會員看不到總體報表');
   // 二、贊助成功後在募資期間取消（＝退款）：後台退款處理看得到
   const rf = await mkOrder(bk, 'fan.real@example.com');
