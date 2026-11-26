@@ -17,11 +17,17 @@ const ADMIN = 'boss@lifemap.local', ADMIN_PW = 'Pr0d-' + Math.random().toString(
 // 假的 Anthropic API：第一次回「要查訂單」，第二次回文字；把伺服器送來的內容記下來，檢查個資有沒有遮
 import http from 'node:http';
 const aiSeen = []; let aiRound = 0;
-const mock = http.createServer((req, res) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => { const j = JSON.parse(b); aiSeen.push({ key: req.headers['x-api-key'], body: j }); aiRound++;
-  const out = aiRound % 2 === 1 ? { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'search_orders', input: { status: 'paid' } }] } : { stop_reason: 'end_turn', content: [{ type: 'text', text: '本月付款成功 **2 筆**' }] };
+const mailSeen = [];
+const mock = http.createServer((req, res) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => { const j = JSON.parse(b);
+  if (req.url === '/emails') { mailSeen.push({ auth: req.headers.authorization, ...j }); res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"id":"x"}'); return; }   // 假的 Resend
+  aiSeen.push({ key: req.headers['x-api-key'], body: j }); aiRound++;
+  const ask = String(j.messages[0].content), first = j.messages.length === 1;
+  const out = !first ? { stop_reason: 'end_turn', content: [{ type: 'text', text: ask.includes('改目標') ? '已幫你準備好變更，請按確認' : '本月付款成功 **2 筆**' }] }
+    : ask.includes('改目標') ? { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't2', name: 'update_project', input: { slug: 'moga', goal: 800000 } }] }
+    : { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'search_orders', input: { status: 'paid' } }] };
   res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(out)); }); });
 await new Promise((r) => mock.listen(0, '127.0.0.1', r));
-const srv = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { PATH: process.env.PATH, PORT: String(PORT), DATA_DIR: dir, ADMIN_EMAIL: ADMIN, ADMIN_PASSWORD: ADMIN_PW, ANTHROPIC_API_KEY: 'test-key-xyz', ANTHROPIC_BASE_URL: `http://127.0.0.1:${mock.address().port}` }, stdio: ['ignore', 'pipe', 'pipe'] });
+const srv = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { PATH: process.env.PATH, PORT: String(PORT), DATA_DIR: dir, ADMIN_EMAIL: ADMIN, ADMIN_PASSWORD: ADMIN_PW, ANTHROPIC_API_KEY: 'test-key-xyz', ANTHROPIC_BASE_URL: `http://127.0.0.1:${mock.address().port}`, RESEND_API_KEY: 'rs-test', RESEND_BASE_URL: `http://127.0.0.1:${mock.address().port}`, MAIL_FROM: 'test <noreply@example.com>' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let log = ''; srv.stdout.on('data', (d) => { log += d; }); srv.stderr.on('data', (d) => { log += d; });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 function client() {
@@ -198,8 +204,35 @@ try {
   ok(ai.s === 200 && ai.j.reply.includes('2 筆') && ai.j.tools.includes('search_orders'), '六、AI：會呼叫查詢工具再回答');
   const sent = JSON.stringify(aiSeen.map((x) => x.body));
   ok(aiSeen.every((x) => x.key === 'test-key-xyz') && !JSON.stringify(ai.j).includes('test-key-xyz'), '六、AI 金鑰只在伺服器，不會回給前端');
-  ok(sent.includes('tool_result') && !sent.includes('0911222333') && !sent.includes('某路 1 號'), '六、AI：預設遮蔽電話、地址');
+  ok(sent.includes('tool_result'), '六、AI：查詢結果有送回 AI');
   ok((await ad.post('/api/admin/ai', { messages: [] })).s === 400, '六、AI：空問題擋下');
+  ok(aiSeen.some((x) => /0911222333/.test(JSON.stringify(x.body))), 'AI：預設可以讀完整資料（KIRK 要求）');
+  // AI 改資料：先產生變更單，按確認才改
+  const g0goal = (await anon.get('/api/p/moga')).j.goal;
+  const aw = await ad.post('/api/admin/ai', { messages: [{ role: 'user', content: '茅港尾改目標 80 萬' }] });
+  ok(aw.s === 200 && aw.j.proposals.length === 1 && /800000/.test(aw.j.proposals[0].summary) && (await anon.get('/api/p/moga')).j.goal === g0goal, 'AI 改資料：產生變更單，還沒真的改');
+  ok((await (await fresh()).post('/api/admin/ai/confirm', { id: aw.j.proposals[0].id })).s !== 200, '別人不能按確認');
+  ok((await ad.post('/api/admin/ai/confirm', { id: aw.j.proposals[0].id })).s === 200 && (await anon.get('/api/p/moga')).j.goal === 800000, 'AI 改資料：管理員按確認後才改（目標 80 萬）');
+  ok((await ad.post('/api/admin/ai/confirm', { id: aw.j.proposals[0].id })).s === 400, '變更單用過就失效');
+  // 留言：只有會員能留；回覆會寄真的 Email 給原留言的人
+  ok((await anon.post('/api/p/moga/comments', { body: '路人留言' })).s === 401, '沒登入不能留言');
+  const cp = await bk.post('/api/p/moga/comments', { body: '請問什麼時候寄' }); if (cp.s !== 200) console.log('留言失敗', cp.s, cp.j);
+  const cm = (await ad.get('/api/admin/comments')).j.find((c) => c.body === '請問什麼時候寄');
+  const before = mailSeen.length;
+  ok((await ad.post(`/api/admin/comments/${cm.id}/reply`, { body: '過年前寄出' })).s === 200, '後台回覆留言');
+  await wait(300);
+  const m1 = mailSeen.slice(before).find((x) => x.to.includes('fan.real@example.com'));
+  ok(m1 && m1.auth === 'Bearer rs-test' && /回覆了你/.test(m1.subject) && m1.text.includes('過年前寄出'), '回覆留言：真的寄 Email 給原留言的人');
+  ok((await anon.get('/api/p/moga')).j.comments.some((c) => c.body === '過年前寄出' && c.isCreator), '回覆顯示為「人生地圖」');
+  // 回饋圖片：正方形 1000×1000（PNG、GIF 都可以），其他尺寸擋下
+  const png = (w, hh) => { const b = Buffer.alloc(64); Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b, 0); b.writeUInt32BE(13, 8); b.write('IHDR', 12, 'latin1'); b.writeUInt32BE(w, 16); b.writeUInt32BE(hh, 20); return b; };
+  const gif = (w, hh) => { const b = Buffer.alloc(64); b.write('GIF89a', 0, 'latin1'); b.writeUInt16LE(w, 6); b.writeUInt16LE(hh, 8); return b; };
+  const up = async (buf, name, kind) => { const fd = new FormData(); fd.append('file', new Blob([buf]), name); const me = await ad.me(); const r = await fetch(B + '/api/upload' + (kind ? '?kind=' + kind : ''), { method: 'POST', headers: { cookie: ad.cookie, 'x-csrf': me.csrf }, body: fd }); return { s: r.status, j: await r.json() }; };
+  ok((await up(png(1000, 1000), 'a.png', 'option')).s === 200, '回饋圖片：1000×1000 PNG 可以');
+  ok((await up(gif(1000, 1000), 'a.gif', 'option')).s === 200, '回饋圖片：1000×1000 GIF 可以');
+  const bad1 = await up(png(1200, 800), 'b.png', 'option');
+  ok(bad1.s === 400 && /1000×1000/.test(bad1.j.error) && /1200×800/.test(bad1.j.error), '回饋圖片：不是 1000×1000 擋下，並告訴他實際尺寸');
+  ok((await up(png(1200, 800), 'c.png', '')).s === 200, '其他地方（封面）上傳不限尺寸');
   await wait(1300);
   const db = fs.readFileSync(path.join(dir, 'db.json'), 'utf8');
   ok(!db.includes(rp.j.tempPassword) && !db.includes(ADMIN_PW), '資料檔裡找不到任何明文密碼');

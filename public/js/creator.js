@@ -15,7 +15,7 @@ async function shell(pid, key, content) {
   const d = await api(`/api/c/${pid}`), p = d.project;
   const staff = state.me && state.me.role !== 'member';
   const side = h('nav', { class: 'side' }, staff ? link('/admin/projects', '← 回上架後台（計畫管理）', 'side-a back') : null, h('div', { class: 'side-h' }, badge(p.typeName), h('b', {}, p.title), h('div', { class: 'muted small' }, `#${p.id}　`, link('/p/' + p.slug, '前台頁面 ↗'))),
-    MENU.filter(([k]) => state.demo || !['business', 'payment'].includes(k)).map(([k, label]) => link(`/c/${pid}${k ? '/' + k : ''}`, label, 'side-a' + (k === key ? ' on' : ''))));
+    MENU.filter(([k]) => state.demo || !['business', 'payment', 'updates'].includes(k)).map(([k, label]) => link(`/c/${pid}${k ? '/' + k : ''}`, label, 'side-a' + (k === key ? ' on' : ''))));
   return h('div', { class: 'dash' }, side, h('div', { class: 'dash-main' }, await content(d)));
 }
 const pidOf = (x) => Number(x.pid);
@@ -102,7 +102,7 @@ async function optionForm(pid, oid) {
   let mediaList = (v.media || []).slice();
   const mediaBox = h('div', { class: 'media-list' });
   const drawMedia = () => mediaBox.replaceChildren(...mediaList.map((m, i) => h('div', { class: 'mitem' }, media(m, 'thumb'), h('button', { class: 'x', title: '移除', on: { click: () => { mediaList.splice(i, 1); drawMedia(); } } }, '✕'))),
-    h('label', { class: 'btn sm ghost' }, '＋ 上傳圖片／GIF／影片', h('input', { type: 'file', accept: 'image/*,video/mp4,video/webm', class: 'hidden', on: { change: async (e) => { const f = e.target.files[0]; if (!f) return; const r = await act(() => upload(f), '已上傳'); if (r) { mediaList.push({ url: r.url, type: r.type }); drawMedia(); } } } })));
+    h('label', { class: 'btn sm ghost' }, '＋ 上傳圖片／GIF（1000×1000 正方形）／影片', h('input', { type: 'file', accept: 'image/*,video/mp4,video/webm', class: 'hidden', on: { change: async (e) => { const f = e.target.files[0]; if (!f) return; const r = await act(() => upload(f, 'option'), '已上傳'); if (r) { mediaList.push({ url: r.url, type: r.type }); drawMedia(); } } } })));
   drawMedia();
   // 回饋調查
   let survey = (v.survey || []).map((s) => ({ ...s, choices: (s.choices || []).join('、') }));

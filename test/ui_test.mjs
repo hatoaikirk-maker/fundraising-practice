@@ -106,7 +106,7 @@ try {
   for (const [k, word] of [['', '控制中心'], ['/edit', '專案時程與目標'], ['/faqs', '管理常見問答'], ['/options', '計畫回饋'], ['/options/new', '回饋調查'], ['/reorder', '自訂回饋順序'], ['/coupons', '管理折扣碼'], ['/referrers', '計畫推薦連結列表'], ['/edm', '未結帳 EDM 再行銷設定'], ['/updates', '計畫更新'], ['/updates/new', '更新計畫動態'], ['/metrics', '募得金額成長表'], ['/backers', '贊助名單下載'], ['/orders', '訂單總覽'], ['/refunds', '退款申請總覽'], ['/comments', '留言管理'], ['/business', '銀行帳戶資訊'], ['/payment', '合作金流商店']]) await visit(`/c/${pid}${k}`, word);
   ok(W.document.querySelectorAll('.side .side-a').length === 16, '後台左邊選單：16 項');
   await visit(`/c/${pid}/options/${p.options[0].id}`, '已經有');
-  ok(text().includes('上傳圖片／GIF／影片'), '回饋圖片：可以放 GIF 或影片');
+  ok(text().includes('1000×1000'), '回饋圖片：可以放 GIF 或影片');
   await visit(`/c/${pid}/edit`, '計畫內容');
   ok(W.document.querySelectorAll('.toolbar .tool').length >= 15, '內容編輯器：工具列（大標、小標、顏色、連結、圖片、影片…）');
   click('.tool', '預覽'); ok(!!W.document.querySelector('.preview .rich'), '編輯器：預覽畫得出來');

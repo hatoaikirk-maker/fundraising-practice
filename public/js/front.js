@@ -25,7 +25,7 @@ route('/', async () => {
       h('div', { class: 'row' }, link('/explore', '看所有護持專案', 'btn big'), link('/#story', '人生地圖初心', 'btn big ghost-w')))),
     focus.length ? h('section', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', {}, '焦點專案')), h('div', { class: 'focus' }, focus.map((p) => link('/p/' + p.slug, [p.cover ? media({ url: p.cover }, 'cover') : h('div', { class: 'cover ph' }, p.title.slice(0, 2)), h('div', { class: 'focus-t' }, h('b', {}, p.title), h('span', {}, '瞭解更多 ›'))], 'focus-card')))) : null,
     h('section', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', {}, '護持進行中'), link('/explore', '觀看所有專案 ›')), d.live.length ? h('div', { class: 'rows' }, d.live.map(projectRow)) : h('p', { class: 'muted' }, '目前沒有進行中的專案')),
-    d.updates.length ? h('section', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', {}, '最新進度')), h('ul', { class: 'updates-list' }, d.updates.map((u) => h('li', {}, link('/p/' + u.slug + '?tab=updates', `${u.project}｜${u.title}`), h('span', { class: 'muted small' }, ago(u.at)))))) : null,
+    state.demo && d.updates.length ? h('section', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', {}, '最新進度')), h('ul', { class: 'updates-list' }, d.updates.map((u) => h('li', {}, link('/p/' + u.slug + '?tab=updates', `${u.project}｜${u.title}`), h('span', { class: 'muted small' }, ago(u.at)))))) : null,
     d.archive.length ? h('section', { class: 'sec', id: 'archive' }, h('div', { class: 'sec-h' }, h('h2', {}, '歷年專案'), link('/explore?status=success', '觀看所有歷年專案 ›')), grid(d.archive)) : null,
     d.wall.length ? h('section', { class: 'sec', id: 'wall' }, h('div', { class: 'sec-h' }, h('h2', {}, '愛心回饋牆')), h('div', { class: 'wall' }, d.wall.map((w) => h('figure', { class: 'wall-card' }, w.tag ? h('span', { class: 'pill' }, w.tag) : null, h('blockquote', {}, w.text), h('figcaption', {}, '— ' + w.who))))) : null,
     h('section', { class: 'sec story', id: 'story' }, h('div', { class: 'sec-h' }, h('h2', {}, '人生地圖初心')), h('div', { class: 'story-in' }, markup(d.about || '人生地圖由麥睿資訊經營，陪著台灣各地的廟宇，把香火、信仰與在地文化，帶到更多人面前。\n\n我們相信，**每一份護持都應該被看見**：款項用在哪裡、工程做到哪裡、回饋何時寄出，都會在專案頁持續更新。\n\n想替你熟悉的廟宇發起專案？歡迎填寫[宮廟合作申請](/inquiry)，我們會主動與你聯繫。'))));
@@ -71,7 +71,8 @@ route('/p/:slug', async ({ slug }, q) => {
   let body;
   const follow = p.updates.filter((u) => u.category === '結案追蹤'), normal = p.updates.filter((u) => u.category !== '結案追蹤');
   const upList = (list, empty) => list.length ? list.map((u) => h('article', { class: 'card' }, h('div', { class: 'muted' }, `${u.category}｜${dt(u.at)}${u.private ? '｜贊助人限定' : ''}`), h('h3', {}, u.title), u.cover ? media({ url: u.cover }) : null, u.locked ? h('p', { class: 'lock' }, '🔒 這則更新只有特定回饋的贊助人看得到') : markup(u.content))) : h('p', { class: 'muted' }, empty);
-  if (tab === 'followups') body = upList(follow, '專案結束後，款項用途、工程與回饋寄送的成果會在這裡公開');
+  if (!state.demo && (tab === 'followups' || tab === 'updates')) body = h('p', { class: 'muted' }, '這個頁面已經沒有了');
+  else if (tab === 'followups') body = upList(follow, '專案結束後，款項用途、工程與回饋寄送的成果會在這裡公開');
   else if (tab === 'updates') body = normal.length ? upList(normal, '') : h('p', { class: 'muted' }, '還沒有專案更新');
   else if (tab === 'comments') body = comments(p, slug);
   else if (tab === 'faqs') body = p.faqs.length ? h('div', {}, p.faqs.map((f) => h('details', { class: 'faq' }, h('summary', {}, f.q), h('p', {}, f.a)))) : h('p', { class: 'muted' }, '還沒有常見問答');
@@ -99,7 +100,7 @@ route('/p/:slug', async ({ slug }, q) => {
         h('div', { class: 'p-actions' }, followBtn, shareFb, shareLine),
         h('div', { class: 'row small' }, share, contact),
         p.canManage ? link(`/c/${p.id}`, '管理計畫後台', 'btn dark full') : null)),
-    h('div', { class: 'tabs-bar' }, h('nav', { class: 'tabs' }, T('story', '專案內容'), T('updates', `專案更新 ${normal.length}`), T('comments', `留言 ${p.comments.length}`), T('faqs', `常見問答 ${p.faqs.length}`), T('followups', '結案追蹤'), T('backers', `贊助人 ${num(p.backers)}`))),
+    h('div', { class: 'tabs-bar' }, h('nav', { class: 'tabs' }, T('story', '專案內容'), state.demo ? T('updates', `專案更新 ${normal.length}`) : null, T('comments', `留言 ${p.comments.length}`), T('faqs', `常見問答 ${p.faqs.length}`), state.demo ? T('followups', '結案追蹤') : null, T('backers', `贊助人 ${num(p.backers)}`))),
     h('div', { class: 'p-main' },
       h('div', { class: 'p-left' }, body, h('div', { class: 'tr' }, report)),
       h('aside', { class: 'p-right' }, h('h3', {}, sub ? '選擇訂閱方案' : '選擇護持方案'), codeBox, opts.length ? opts : h('p', { class: 'muted' }, '提案人還沒設定回饋'))));

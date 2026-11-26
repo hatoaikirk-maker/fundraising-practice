@@ -366,3 +366,9 @@ input.sm { min-height: 36px; padding: 4px 8px; width: 110px; } input.qty { width
 .plist { gap: 8px; }
 .small-tabs { margin-bottom: 12px; } .small-tabs .tab { min-height: 40px; padding: 8px 14px; }
 @media (max-width: 700px) { .pitem { grid-template-columns: 72px minmax(0, 1fr); } .pitem-img { width: 72px; } .pitem-actions { grid-column: 1 / -1; } }
+.ai-prop { margin-top: 8px; border: 1px dashed var(--ac); background: #fffaf9; border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; font-size: .92rem; }
+.ai-prop.done { border-style: solid; border-color: var(--line); background: #fff; }
+
+/* 回饋方案圖片：正方形 1000×1000（KIRK 指示） */
+.omedia img, .omedia video { aspect-ratio: 1 / 1 !important; object-fit: cover; }
+.mitem .thumb { width: 96px; height: 96px; }
