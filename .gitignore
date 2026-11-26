@@ -4,3 +4,5 @@ node_modules/
 *.log
 .DS_Store
 repo_url.txt
+# 內部文件（Word）不上傳到公開 repo
+*.docx
