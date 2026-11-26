@@ -1,42 +1,48 @@
 /**
- * 啟動：頁首（探索、提案、搜尋、站內訊息、個人選單）、頁尾（幫助、關於）、公告列，然後依網址畫頁面
+ * 人生地圖募資：頁首（Logo、探索、發起計畫、搜尋、站內訊息、個人選單）、頁尾（幫助、關於、公司資訊）、公告列，然後依網址畫頁面
  */
 import { h, link, go, api, state, loadMe, render, onRender, setNotFound, route, act, $ } from './core.js';
 import './front.js';
 import './creator.js';
 import './admin.js';
 
+/** Logo：紅色方塊裡一個圓（像一盞燈）＋「人生地圖募資」；不用任何別家平台的標誌 */
+const logo = () => h('span', { class: 'logo' }, h('i', { 'aria-hidden': 'true' }), h('span', {}, '人生地圖'), h('em', {}, '募資'));
 function header() {
   const me = state.me;
   const q = h('input', { type: 'search', placeholder: '搜尋計畫', 'aria-label': '搜尋計畫' });
   const menu = h('div', { class: 'menu hidden' });
   if (me) menu.append(
-    link('/u/' + me.slug, '個人頁面'), link('/me/orders', '贊助紀錄'), link('/me/following', '追蹤計畫'), link('/me/projects', '提案紀錄'), link('/me/mail', '我的信箱（模擬）'), link('/me/settings', '帳號設定'), link('/me/team', '團隊設定'),
-    me.role !== 'member' ? link('/admin', '平台管理後台', 'strong') : null,
+    link('/u/' + me.slug, '個人頁面'), link('/me/orders', '贊助紀錄'), link('/me/following', '追蹤計畫'), link('/me/projects', '提案紀錄'), link('/me/mail', '通知信箱'), link('/me/settings', '帳號設定'), link('/me/team', '團隊設定'),
+    me.role !== 'member' ? link('/admin', me.role === 'admin' ? '平台管理後台（管理員）' : '平台管理後台（一般人員）', 'strong') : null,
     h('button', { class: 'linkbtn', on: { click: async () => { if (await act(() => api('/api/logout', {}), '已登出')) { await loadMe(); go('/'); } } } }, '登出'));
-  const user = me ? h('button', { class: 'avatar-btn', 'aria-label': '個人選單', on: { click: (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); } } }, me.avatar ? h('img', { src: me.avatar, alt: '' }) : me.name.slice(0, 1)) : h('span', {}, link('/login?next=' + encodeURIComponent(location.pathname), '登入'), ' ', link('/register', '註冊', 'btn sm'));
+  const user = me ? h('button', { class: 'avatar-btn', 'aria-label': '個人選單', on: { click: (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); } } }, me.avatar ? h('img', { src: me.avatar, alt: '' }) : me.name.slice(0, 1)) : h('span', { class: 'top-auth' }, link('/login?next=' + encodeURIComponent(location.pathname), '登入', 'btn sm ghost'), link('/register', '註冊', 'btn sm'));
   document.addEventListener('click', () => menu.classList.add('hidden'));
   return h('header', { class: 'top' }, h('div', { class: 'top-in' },
-    link('/', h('span', { class: 'logo' }, h('b', {}, '募資'), '練習平台')),
-    h('nav', { class: 'top-nav' }, link('/explore', '探索'), link('/start', '提案')),
+    link('/', logo(), null),
+    h('nav', { class: 'top-nav' }, link('/explore', '探索'), link('/start', '發起計畫')),
     h('form', { class: 'top-search', on: { submit: (e) => { e.preventDefault(); go('/explore?q=' + encodeURIComponent(q.value)); } } }, q),
     me ? link('/me/inbox', state.unread ? `訊息 (${state.unread})` : '訊息', 'top-msg') : null,
     h('div', { class: 'user' }, user, menu)));
 }
 const HELP = {
-  faq: ['常見問答', '## 贊助\n- 計畫成功後，依你贊助的金額得到回饋。\n- 計畫如果失敗，贊助金額會退回（虛擬帳號轉帳手續費不退）。\n- 募資期間可以在「贊助紀錄」取消；結束後可以申請退款，由提案人或平台審核。\n## 提案\n- 發起不用錢，成功才收平台手續費＋金流費。\n- 提案後依序經過五個審核階段，全部通過才會上線。'],
-  terms: ['使用條款（練習用）', '這是給新同事練習群眾募資作業的平台。\n\n- 所有金流都是模擬的，不會真的扣款或撥款。\n- 請不要輸入真實的身分證字號、銀行帳號、信用卡號。\n- 平台人員可能隨時重置練習資料。'],
-  privacy: ['隱私權政策（練習用）', '- 練習平台只存你自己輸入的資料，存在架設這台電腦的 data 資料夾。\n- 收件資料只有該訂單的贊助人、計畫團隊、平台人員看得到；前台贊助人名單只顯示遮罩後的名字。\n- 密碼用 scrypt 加鹽雜湊保存，平台人員也看不到。'],
-  payment: ['金流運作說明', '## 付款方式\n- **信用卡**：可設定分期（3 期、6 期）。練習用：卡號末四碼輸入 0002 會被拒絕，其他都會成功。\n- **ATM 虛擬帳號**：訂單成立隔天 23:59:59 前付款；逾期訂單取消、名額放回。\n- **AFTEE 先享後付**：模擬，按付款就成功。\n## 撥款\n- 群眾集資、預購式：專案完結後 28 個工作日內撥款。\n- 訂閱專案：次月 15 日撥款。\n- 撥款金額＝集資總額 − 金流服務費 − 平台手續費（預設合計 8%）。'],
+  faq: ['常見問答', '## 贊助\n- 計畫成功後，依你贊助的方案得到回饋與祈福。\n- 群眾集資計畫如果沒有達標，贊助金額會全額退回（虛擬帳號轉帳手續費不退）。\n- 募資期間可以在「贊助紀錄」自行取消；結束後可以申請退款，由提案團隊審核。\n## 提案\n- 想替你熟悉的廟宇發起計畫？到「發起計畫」建立草稿，我們的專案人員會跟你聯繫。\n- 計畫依序經過五個審核階段，全部通過才會上線。'],
+  terms: ['使用條款', '歡迎使用人生地圖募資（以下稱本平台），由麥睿資訊股份有限公司經營。\n\n- 使用本平台即表示你同意本條款。\n- 贊助款項用於各計畫頁面所載的用途；回饋內容、出貨時程依各計畫頁面為準。\n- 請提供正確的聯絡與收件資料，資料錯誤導致無法寄送或祈福登錄，提案團隊恕不負責。\n- 本平台保留審核、下架計畫與停權帳號的權利。'],
+  privacy: ['隱私權政策', '- 我們只收集提供服務所需的資料：Email、名稱、收件資料、回饋調查內容。\n- 收件資料只有該訂單的贊助人、計畫團隊與平台人員看得到；計畫頁的贊助人名單只顯示遮罩後的名字。\n- 密碼以 scrypt 加鹽雜湊保存，平台人員也看不到。\n- 除寄送所需的物流業者外，不會提供給第三方。'],
+  payment: ['付款與撥款說明', '## 付款方式\n- **信用卡**：部分方案可分期（3 期、6 期）。\n- **ATM 虛擬帳號**：訂單成立隔天 23:59:59 前付款；逾期訂單取消、名額放回。\n- 線上付款開放前，訂單會先保留，開放後會另行通知。\n## 撥款\n- 群眾集資：專案完結後 28 個工作日內撥款給提案團隊。\n- 訂閱專案：次月 15 日撥款。'],
 };
 route('/help/:page', async ({ page }) => { const [t, c] = HELP[page] || HELP.faq; const { markup } = await import('./core.js'); return h('div', { class: 'narrow card' }, h('h1', {}, t), markup(c)); });
 function footer() {
-  return h('footer', { class: 'foot' }, h('div', { class: 'foot-in' }, h('div', {}, h('b', {}, '幫助'), link('/help/faq', '常見問答'), link('/help/terms', '使用條款'), link('/help/privacy', '隱私權政策'), link('/help/payment', '金流運作說明')),
-    h('div', {}, h('b', {}, '關於'), h('span', {}, '募資練習平台：給新同事練習用，流程參考台灣主流群眾募資平台的公開規則；不是任何平台的官方系統。'))));
+  return h('footer', { class: 'foot' },
+    h('div', { class: 'foot-in' },
+      h('div', {}, logo(), h('span', {}, '陪在地廟宇把香火與文化，帶給更多人。每一份護持，都會回到廟裡。')),
+      h('div', {}, h('b', {}, '探索'), link('/explore', '所有計畫'), link('/explore?type=crowd', '群眾集資'), link('/explore?type=subscription', '訂閱專案'), link('/start', '發起計畫')),
+      h('div', {}, h('b', {}, '幫助'), link('/help/faq', '常見問答'), link('/help/payment', '付款與撥款說明'), link('/help/terms', '使用條款'), link('/help/privacy', '隱私權政策'))),
+    h('div', { class: 'foot-copy' }, `© ${new Date().getFullYear()} 麥睿資訊股份有限公司・人生地圖募資`));
 }
 function frame() {
   const notices = (state.notices || []).slice(0, 1);
-  document.body.replaceChildren(h('div', { class: 'ribbon' }, '練習平台・所有金流都是模擬的，不會真的扣款'), notices.length ? h('div', { class: 'notice' }, h('b', {}, notices[0].title), '　', notices[0].body) : '', header(), h('main', { id: 'view', class: 'wrap' }), footer());
+  document.body.replaceChildren(notices.length ? h('div', { class: 'notice' }, h('b', {}, notices[0].title), '　', notices[0].body) : '', header(), h('main', { id: 'view', class: 'wrap' }), footer());
 }
 setNotFound(() => h('div', { class: 'card center' }, h('h2', {}, '找不到這一頁'), link('/', '回首頁', 'btn')));
 let lastUser = undefined;

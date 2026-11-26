@@ -1,22 +1,27 @@
 /**
- * 平台管理後台（admin）：給「平台方」練習用——審核提案、管理計畫、會員、訂單、退款、撥款、檢舉、留言、公告、平台設定、寄信紀錄、操作紀錄、模擬時鐘、重置練習資料
- * 平台官方內部系統不公開，這一頁照公開規則（審核五階段、手續費、撥款時間、退款）設計，畫面上有標示。
- * staff（專案經理）看得到大部分；admin 才有：會員權限、撥款、平台設定、寄信紀錄、操作紀錄、時鐘、重置。
+ * 平台管理後台：審核提案、管理計畫、會員、訂單、退款、撥款、檢舉、留言、公告、平台設定、寄信紀錄、操作紀錄
+ * 兩種平台人員（KIRK：「管理人員要區分，admin，跟一般人員」）：
+ *   - 管理員（admin）：全部功能，另外可以新增／管理人員、看撥款、改平台設定、看寄信與操作紀錄
+ *   - 一般人員（staff）：日常作業——審核、計畫、訂單、退款、檢舉、留言、公告
+ * 權限一律在伺服器再檢查一次；這裡只是把看不到的選單藏起來。
+ * 測試模式（DEMO=1）才有「時鐘與重置」。
  */
 import { h, link, go, api, state, toast, act, modal, ask, money, num, dt, dtInput, ago, field, inp, area, sel, chk, table, badge, markup, route } from './core.js';
 
+// [網址, 名稱, 只有管理員看得到, 只有測試模式才有]
 const MENU = [['', '總覽'], ['review', '提案審核'], ['projects', '計畫管理'], ['orders', '訂單管理'], ['refunds', '退款處理'], ['reports', '檢舉處理'], ['comments', '留言管理'], ['notices', '首頁公告'],
-  ['users', '會員管理', true], ['payouts', '撥款結算', true], ['settings', '平台設定', true], ['emails', '寄信紀錄', true], ['audit', '操作紀錄', true], ['clock', '模擬時鐘與重置', true]];
+  ['users', '人員與會員', true], ['payouts', '撥款結算', true], ['settings', '平台設定', true], ['emails', '寄信紀錄', true], ['audit', '操作紀錄', true], ['clock', '時鐘與重置（測試模式）', true, true]];
+const ROLE_NAMES = { member: '一般會員', staff: '一般人員', admin: '管理員' };
 async function shell(key, content) {
   const isAdmin = state.me && state.me.role === 'admin';
-  const side = h('nav', { class: 'side admin' }, h('div', { class: 'side-h' }, h('b', {}, '平台管理後台'), h('div', { class: 'small muted' }, isAdmin ? '管理員' : '專案經理')), MENU.filter((m) => !m[2] || isAdmin).map(([k, label]) => link(`/admin${k ? '/' + k : ''}`, label, 'side-a' + (k === key ? ' on' : ''))));
+  const side = h('nav', { class: 'side admin' }, h('div', { class: 'side-h' }, h('b', {}, '平台管理後台'), h('div', { class: 'small muted' }, state.me ? state.me.name : ''), h('span', { class: 'role-tag' + (isAdmin ? '' : ' staff') }, isAdmin ? '管理員' : '一般人員')), MENU.filter((m) => (!m[2] || isAdmin) && (!m[3] || state.demo)).map(([k, label]) => link(`/admin${k ? '/' + k : ''}`, label, 'side-a' + (k === key ? ' on' : ''))));
   return h('div', { class: 'dash' }, side, h('div', { class: 'dash-main' }, await content()));
 }
 const reload = () => go(location.pathname + location.search, true);
 
 route('/admin', async () => shell('', async () => {
   const d = await api('/api/admin/overview');
-  return h('div', {}, h('h1', {}, '總覽'), d.clockOffset ? h('p', { class: 'warn' }, `模擬時鐘已快轉 ${Math.round(d.clockOffset / 3_600_000)} 小時：平台現在是 ${dt(d.now)}`) : null,
+  return h('div', {}, h('h1', {}, '總覽'), d.clockOffset ? h('p', { class: 'warn' }, `時鐘已快轉 ${Math.round(d.clockOffset / 3_600_000)} 小時：平台現在是 ${dt(d.now)}`) : null,
     h('div', { class: 'kpis' }, [['今日集資', money(d.todayAmount)], ['今日訂單', num(d.todayOrders)], ['累計集資', money(d.totalAmount)], ['會員數', num(d.users)], ['待審核', num(d.reviewQueue)], ['待處理退款', num(d.refunds)], ['待處理檢舉', num(d.reports)], ['7 天內到期撥款', num(d.payoutsDue)]].map(([k, v]) => h('div', { class: 'kpi' }, h('span', {}, k), h('b', {}, v)))),
     h('h2', {}, '計畫狀態'), table(Object.values(state.meta.projectStatus), [Object.keys(state.meta.projectStatus).map((k) => num(d.projects[k]))]));
 }));
@@ -35,7 +40,7 @@ route('/admin/review', async () => shell('review', async () => {
     h('h4', {}, '金流帳號申請'), p.payment ? h('ul', { class: 'small' }, p.payment.providers.map((pv) => h('li', {}, `${pv.name}（${pv.methods}）：${pv.status}`)), h('li', {}, p.payment.submitted ? '已送出' : '還沒送出')) : h('p', { class: 'muted' }, '還沒申請'),
     h('h4', {}, '合約'), p.contract && p.contract.file ? h('a', { href: p.contract.file, target: '_blank', rel: 'noopener' }, '下載合約檔案') : h('p', { class: 'muted' }, '還沒上傳'),
     h('h4', {}, '計畫'), h('p', {}, `回饋選項 ${p.options} 個｜目標 ${money(p.goal)}｜${dt(p.startAt)} ～ ${dt(p.endAt)}`), link('/p/' + p.slug, '預覽計畫頁 ↗')));
-  return h('div', {}, h('h1', {}, '提案審核'), h('p', { class: 'small muted' }, '五個階段依序審：商業檔案與金流帳號初審 → 方案與回饋 → 合約簽署與上傳 → 第三方金流單位審核（模擬外部金流回覆）→ 準備上線（排定時間，時間到自動上線）。退回一定要寫原因。'),
+  return h('div', {}, h('h1', {}, '提案審核'), h('p', { class: 'small muted' }, '五個階段依序審：商業檔案與金流帳號初審 → 方案與回饋 → 合約簽署與上傳 → 第三方金流單位審核→ 準備上線（排定時間，時間到自動上線）。退回一定要寫原因。'),
     list.length ? list.map((p) => h('section', { class: 'card' }, h('div', { class: 'row between' }, h('div', {}, h('b', {}, p.title), h('div', { class: 'small muted' }, `提案人 ${p.owner}｜專案經理 ${p.manager || '未指派'}｜${p.typeName}｜`, badge(p.statusName, p.status))), h('button', { class: 'btn sm ghost', on: { click: () => detail(p) } }, '看審核資料')),
       table(['階段', '狀態', '備註', '操作'], state.meta.steps.map((s) => [s.name, badge(state.meta.stepStates[p.steps[s.key]], p.steps[s.key]), (p.stepNotes || {})[s.key] || '', p.steps[s.key] === 'pending' ? h('div', { class: 'row' }, h('button', { class: 'btn sm', on: { click: () => decide(p, s.key, 'ok') } }, '通過'), h('button', { class: 'btn sm danger', on: { click: () => decide(p, s.key, 'rejected') } }, '退回')) : ''])))) : h('p', { class: 'muted' }, '沒有待審核的計畫'));
 }));
@@ -85,9 +90,25 @@ route('/admin/notices', async () => shell('notices', async () => {
 // ---------- admin 限定 ----------
 route('/admin/users', async (_, q) => shell('users', async () => {
   const list = await api('/api/admin/users?q=' + encodeURIComponent(q.q || '')), kw = inp(q.q || '', { type: 'search', placeholder: 'Email 或名稱' });
-  const doA = async (u, action, extra = {}) => { if (await act(() => api(`/api/admin/users/${u.id}`, { action, ...extra }))) reload(); };
-  return h('div', {}, h('h1', {}, '會員管理'), h('form', { class: 'filters', on: { submit: (e) => { e.preventDefault(); go('/admin/users?q=' + encodeURIComponent(kw.value)); } } }, kw, h('button', { class: 'btn' }, '搜尋')),
-    table(['Email', '名稱', '角色', '贊助', '提案', '註冊', '狀態', '操作'], list.map((u) => { const r = sel({ member: '一般會員', staff: '專案經理', admin: '管理員' }, u.role); r.addEventListener('change', () => doA(u, 'role', { role: r.value })); return [u.email, u.name, u.id === state.me.id ? '管理員（你）' : r, num(u.orders), num(u.projects), dt(u.createdAt, false), u.banned ? badge('停權', 'red') : '正常', u.id === state.me.id ? '' : h('div', { class: 'row' }, h('button', { class: 'btn sm ' + (u.banned ? '' : 'danger'), on: { click: () => doA(u, 'ban') } }, u.banned ? '解除停權' : '停權'), h('button', { class: 'btn sm ghost', on: { click: () => doA(u, 'resetpw') } }, '重設密碼為 Demo1234'))]; })));
+  // 重設密碼、新增人員：伺服器產生臨時密碼，只在這裡顯示一次（伺服器只存雜湊，之後誰都看不到）
+  const showTemp = (who, pw) => modal('臨時密碼', h('div', {}, h('p', {}, `${who} 的臨時密碼（只會顯示這一次，請直接交給本人，登入後到「帳號設定」改掉）：`), h('div', { class: 'secret' }, pw)), [{ text: '我記下來了', fn: () => { reload(); return true; } }]);
+  const doA = async (u, action, extra = {}) => {
+    if ((action === 'ban' && !u.banned) || action === 'resetpw') { if (!confirm(`${action === 'ban' ? '停權' : '重設密碼'}：${u.email}，確定？`)) return; }
+    const r = await act(() => api(`/api/admin/users/${u.id}`, { action, ...extra }));
+    if (r && r.tempPassword) showTemp(u.email, r.tempPassword); else if (r) reload();
+  };
+  const staff = list.filter((u) => u.role !== 'member'), members = list.filter((u) => u.role === 'member');
+  const row = (u) => { const r = sel(ROLE_NAMES, u.role); r.addEventListener('change', () => doA(u, 'role', { role: r.value })); const me = u.id === state.me.id;
+    return [u.email, u.name, me ? ROLE_NAMES[u.role] + '（你）' : r, num(u.orders), num(u.projects), dt(u.createdAt, false), u.banned ? badge('停權', 'red') : '正常', me ? '' : h('div', { class: 'row' }, h('button', { class: 'btn sm ' + (u.banned ? '' : 'danger'), on: { click: () => doA(u, 'ban') } }, u.banned ? '解除停權' : '停權'), h('button', { class: 'btn sm ghost', on: { click: () => doA(u, 'resetpw') } }, '重設密碼'))]; };
+  const em = inp('', { type: 'email', placeholder: 'name@example.com' }), nm = inp('', { placeholder: '名稱' }), rl = sel({ staff: '一般人員', admin: '管理員' }, 'staff');
+  const add = async () => { const r = await act(() => api('/api/admin/users', { email: em.value, name: nm.value, role: rl.value })); if (r) showTemp(em.value, r.tempPassword); };
+  const cols = ['Email', '名稱', '角色', '贊助', '提案', '加入', '狀態', '操作'];
+  return h('div', {}, h('h1', {}, '人員與會員'),
+    h('section', { class: 'card' }, h('h3', {}, '新增平台人員'), h('p', { class: 'small muted' }, '管理員：全部功能（含人員、撥款、平台設定、紀錄）。一般人員：審核、計畫、訂單、退款、檢舉、留言、公告。'),
+      h('div', { class: 'grid3' }, field('Email', em), field('名稱', nm), field('角色', rl)), h('button', { class: 'btn', on: { click: add } }, '新增並產生臨時密碼')),
+    h('h2', {}, `平台人員（${staff.length}）`), table(cols, staff.map(row), '沒有平台人員'),
+    h('h2', {}, '會員'), h('form', { class: 'filters', on: { submit: (e) => { e.preventDefault(); go('/admin/users?q=' + encodeURIComponent(kw.value)); } } }, kw, h('button', { class: 'btn' }, '搜尋')),
+    table(cols, members.map(row), '找不到會員'), list.length >= 300 ? h('p', { class: 'small muted' }, '只列出前 300 筆，其他請用搜尋。') : null);
 }));
 route('/admin/payouts', async () => shell('payouts', async () => {
   const list = await api('/api/admin/payouts');
@@ -105,13 +126,13 @@ route('/admin/settings', async () => shell('settings', async () => {
     h('section', { class: 'card' }, h('h3', {}, '沒達標就全部退款（全有或全無）'), field('群眾集資', F.aonCrowd), field('預購式專案', F.aonPre), field('合作式專案', F.aonCoop)),
     h('section', { class: 'card' }, h('h3', {}, '分類（一行一個）'), F.categories), h('button', { class: 'btn big', on: { click: save } }, '儲存設定'));
 }));
-route('/admin/emails', async () => shell('emails', async () => { const list = await api('/api/admin/emails'); return h('div', {}, h('h1', {}, '寄信紀錄（模擬）'), table(['時間', '收件人', '類型', '主旨', '內容'], list.map((m) => [dt(m.at), m.to, m.kind, m.subject, h('details', {}, h('summary', {}, '展開'), h('p', { class: 'pre small' }, m.body))]))); }));
+route('/admin/emails', async () => shell('emails', async () => { const list = await api('/api/admin/emails'); return h('div', {}, h('h1', {}, '寄信紀錄'), table(['時間', '收件人', '類型', '主旨', '內容'], list.map((m) => [dt(m.at), m.to, m.kind, m.subject, h('details', {}, h('summary', {}, '展開'), h('p', { class: 'pre small' }, m.body))]))); }));
 route('/admin/audit', async () => shell('audit', async () => { const list = await api('/api/admin/audit'); return h('div', {}, h('h1', {}, '操作紀錄'), table(['時間', '誰', '動作', '對象', '說明'], list.map((a) => [dt(a.at), a.actor, a.action, a.target, a.detail]))); }));
 route('/admin/clock', async () => shell('clock', async () => {
   const d = await api('/api/admin/overview');
   const ff = (hours) => act(async () => { await api('/api/admin/clock', { hours }); reload(); }, `已快轉 ${hours} 小時`);
   const confirmIn = inp('', { placeholder: '輸入 RESET' });
-  return h('div', {}, h('h1', {}, '模擬時鐘與重置'), h('section', { class: 'card' }, h('h3', {}, '模擬時鐘'), h('p', {}, `平台現在時間：${dt(d.now)}（快轉 ${Math.round(d.clockOffset / 3_600_000)} 小時）`), h('p', { class: 'small muted' }, '用來練習要等很久的事：ATM 逾期、募資結束（成功／失敗自動退款）、訂閱每月扣款、撥款到期、EDM 提醒。'),
+  return h('div', {}, h('h1', {}, '時鐘與重置（測試模式）'), h('section', { class: 'card' }, h('h3', {}, '時鐘快轉'), h('p', {}, `平台現在時間：${dt(d.now)}（快轉 ${Math.round(d.clockOffset / 3_600_000)} 小時）`), h('p', { class: 'small muted' }, '測試要等很久的事：ATM 逾期、募資結束（成功／失敗自動退款）、訂閱每月扣款、撥款到期、EDM 提醒。'),
     h('div', { class: 'row wrap' }, [1, 24, 24 * 7, 24 * 30].map((hh) => h('button', { class: 'btn ghost', on: { click: () => ff(hh) } }, `快轉 ${hh >= 24 ? hh / 24 + ' 天' : hh + ' 小時'}`)), h('button', { class: 'btn', on: { click: () => act(async () => { await api('/api/admin/clock', { reset: true }); reload(); }, '已回到真實時間') } }, '回到真實時間'))),
-    h('section', { class: 'card' }, h('h3', {}, '重置練習資料'), h('p', { class: 'small muted' }, '全部回到範例資料（所有帳號、計畫、訂單都會重來；上傳的檔案保留）。上完一堂課可以按一次。'), h('div', { class: 'row' }, confirmIn, h('button', { class: 'btn danger', on: { click: async () => { if (await act(() => api('/api/admin/reset', { confirm: confirmIn.value }), '已重置，請重新登入')) { location.href = '/login'; } } } }, '重置'))));
+    h('section', { class: 'card' }, h('h3', {}, '重置測試資料'), h('p', { class: 'small muted' }, '全部回到測試資料（所有帳號、計畫、訂單都會重來；上傳的檔案保留）。'), h('div', { class: 'row' }, confirmIn, h('button', { class: 'btn danger', on: { click: async () => { if (await act(() => api('/api/admin/reset', { confirm: confirmIn.value }), '已重置，請重新登入')) { location.href = '/login'; } } } }, '重置'))));
 }));

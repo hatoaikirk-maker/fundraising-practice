@@ -7,9 +7,9 @@ import { h, link, go, api, state, loadMe, toast, act, modal, ask, money, num, dt
 export function projectCard(p) {
   const bar = h('div', { class: 'progress' }, h('i', { style: { width: Math.min(100, p.percent) + '%' } }));
   return h('article', { class: 'pcard' },
-    link('/p/' + p.slug, h('div', { class: 'pcover' }, p.cover ? media({ url: p.cover }, 'cover') : h('div', { class: 'cover ph' }, p.title.slice(0, 2)), h('span', { class: 'ptype' }, p.typeName))),
+    link('/p/' + p.slug, [p.cover ? media({ url: p.cover }, 'cover') : h('div', { class: 'cover ph' }, p.title.slice(0, 2)), h('span', { class: 'ptype' }, p.typeName)], 'pcover'),
     h('div', { class: 'pbody' },
-      h('div', { class: 'pmeta' }, h('span', {}, p.category), ' By ', h('span', {}, p.owner)),
+      h('div', { class: 'pmeta' }, `${p.category}・${p.owner}`),
       link('/p/' + p.slug, p.title, 'ptitle'), h('p', { class: 'pdesc' }, p.description),
       p.type === 'subscription' ? h('div', { class: 'pnum' }, h('b', {}, money(p.monthly) + ' / 每月'), h('span', {}, '長期訂閱')) : [bar, h('div', { class: 'pnum' }, h('b', {}, money(p.raised)), h('span', {}, p.status === 'live' ? p.left : p.statusName), h('span', { class: 'pct' }, p.percent + '%'))]));
 }
@@ -19,16 +19,22 @@ const grid = (list, empty = '目前沒有計畫') => (list.length ? h('div', { c
 route('/', async () => {
   const d = await api('/api/home');
   const hero = d.featured[0];
-  return h('div', {},
-    hero ? h('section', { class: 'hero' }, h('div', { class: 'hero-img' }, hero.cover ? media({ url: hero.cover }, 'cover') : h('div', { class: 'cover ph big' }, hero.title.slice(0, 4))),
-      h('div', { class: 'hero-txt' }, h('span', { class: 'ptype' }, hero.left), h('h1', {}, hero.title), h('p', {}, hero.description), h('div', { class: 'hero-num' }, money(hero.raised)), link('/p/' + hero.slug, '查看計畫內容 ▸', 'btn'))) : null,
-    h('section', {}, h('h2', {}, '探索專案類別'), h('div', { class: 'cats' }, d.categories.map((c) => link('/explore?category=' + encodeURIComponent(c), c, 'chip')), link('/explore', '更多 ▸', 'chip ghost'))),
-    h('section', {}, h('div', { class: 'sec-h' }, h('h2', {}, '群眾集資'), link('/explore?type=crowd', '更多 ▸')), grid(d.crowd)),
-    h('section', {}, h('div', { class: 'sec-h' }, h('h2', {}, '預購式專案'), link('/explore?type=preorder', '更多 ▸')), grid(d.preorder)),
-    h('section', {}, h('div', { class: 'sec-h' }, h('h2', {}, '訂閱式專案'), link('/explore?type=subscription', '更多 ▸')), grid(d.subscription)),
-    d.picks.length ? h('section', {}, h('h2', {}, '編輯精選'), grid(d.picks)) : null,
-    h('section', {}, h('h2', {}, '計畫更新'), d.updates.length ? h('ul', { class: 'list' }, d.updates.map((u) => h('li', {}, link('/p/' + u.slug + '?tab=updates', `${u.project}｜${u.title}`), h('span', { class: 'muted' }, ' ' + ago(u.at))))) : h('p', { class: 'muted' }, '還沒有更新')),
-    h('section', {}, h('h2', {}, '近期成功計畫'), grid(d.success, '還沒有成功的計畫')));
+  const sec = (title, more, list, empty) => h('section', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', {}, title), more ? link(more, '查看更多 ›') : null), grid(list, empty));
+  // 主打：大圖＋金額、達成率（其他主打、精選放在下面「熱門計畫」）
+  const heroBox = hero ? h('section', { class: 'hero' },
+    link('/p/' + hero.slug, hero.cover ? media({ url: hero.cover }, 'cover') : h('div', { class: 'cover ph big' }, hero.title.slice(0, 4)), 'hero-img'),
+    h('div', { class: 'hero-txt' }, h('span', { class: 'pill' }, hero.type === 'subscription' ? '長期訂閱' : hero.left), h('h1', {}, hero.title), h('p', {}, hero.description),
+      h('div', { class: 'hero-num' }, money(hero.raised)), h('div', { class: 'hero-sub' }, hero.type === 'subscription' ? '本月累計' : `已達成 ${hero.percent}%・目標 ${money(hero.goal)}`),
+      link('/p/' + hero.slug, '查看計畫', 'btn big'))) : null;
+  const hot = d.featured.slice(1).concat(d.picks.filter((p) => !d.featured.some((f) => f.slug === p.slug))).slice(0, 6);
+  return h('div', {}, heroBox,
+    hot.length ? sec('熱門計畫', '/explore?sort=raised', hot) : null,
+    d.crowd.length ? sec('群眾集資', '/explore?type=crowd', d.crowd) : null,
+    d.preorder.length ? sec('預購專案', '/explore?type=preorder', d.preorder) : null,
+    d.subscription.length ? sec('訂閱專案', '/explore?type=subscription', d.subscription) : null,
+    d.updates.length ? h('section', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', {}, '最新計畫動態')), h('ul', { class: 'updates-list' }, d.updates.map((u) => h('li', {}, link('/p/' + u.slug + '?tab=updates', `${u.project}｜${u.title}`), h('span', { class: 'muted small' }, ago(u.at)))))) : null,
+    d.success.length ? sec('成功計畫', '/explore?status=success', d.success) : null,
+    h('section', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', {}, '探索分類')), h('div', { class: 'cats' }, d.categories.map((c) => link('/explore?category=' + encodeURIComponent(c), c, 'chip')))));
 });
 
 // ---------- 探索 ----------
@@ -40,8 +46,8 @@ route('/explore', async (_, q) => {
   const apply = (page = 1) => { const n = new URLSearchParams(); if (kw.value) n.set('q', kw.value); if (type.value) n.set('type', type.value); if (cat.value) n.set('category', cat.value); if (status.value) n.set('status', status.value); if (sort.value) n.set('sort', sort.value); if (page > 1) n.set('page', page); go('/explore?' + n.toString()); };
   for (const e of [type, cat, status, sort]) e.addEventListener('change', () => apply());
   const pages = Math.ceil(d.total / d.per);
-  return h('div', {}, h('h1', {}, '探索'), h('form', { class: 'filters', on: { submit: (e) => { e.preventDefault(); apply(); } } }, kw, type, cat, status, sort, h('button', { class: 'btn' }, '搜尋')),
-    h('p', { class: 'muted' }, `共 ${d.total} 個計畫`), grid(d.list, '找不到符合的計畫'),
+  return h('div', {}, h('h1', {}, '探索計畫'), h('form', { class: 'filters', on: { submit: (e) => { e.preventDefault(); apply(); } } }, kw, type, cat, status, sort, h('button', { class: 'btn' }, '搜尋')),
+    h('p', { class: 'muted small' }, `共 ${d.total} 個計畫`), grid(d.list, '找不到符合的計畫'),
     pages > 1 ? h('div', { class: 'pager' }, Array.from({ length: pages }, (_, i) => h('button', { class: 'btn ' + (i + 1 === d.page ? '' : 'ghost'), on: { click: () => apply(i + 1) } }, String(i + 1)))) : null);
 });
 
@@ -60,21 +66,29 @@ route('/p/:slug', async ({ slug }, q) => {
   else if (tab === 'comments') body = comments(p, slug);
   else if (tab === 'faqs') body = p.faqs.length ? h('div', {}, p.faqs.map((f) => h('details', { class: 'faq' }, h('summary', {}, f.q), h('p', {}, f.a)))) : h('p', { class: 'muted' }, '還沒有常見問答');
   else if (tab === 'backers') body = table(['贊助人', '金額', '時間'], p.backerList.map((b) => [b.name, money(b.amount), ago(b.at)]), '還沒有贊助人');
-  else body = h('div', {}, p.video ? videoEmbed(p.video) : null, markup(p.content), p.risk ? h('section', { class: 'card' }, h('h3', {}, '風險與挑戰'), h('p', { class: 'pre' }, p.risk)) : null, p.returns ? h('section', { class: 'card' }, h('h3', {}, '退換貨規則'), h('p', { class: 'pre' }, p.returns)) : null, p.contact ? h('section', { class: 'card' }, h('h3', {}, '客服聯絡方式'), h('p', { class: 'pre' }, p.contact)) : null, p.afteeNote ? h('section', { class: 'card' }, h('h3', {}, 'AFTEE 支付相關宣告'), h('p', { class: 'pre' }, p.afteeNote)) : null);
+  else body = h('div', {}, p.video ? videoEmbed(p.video) : null, markup(p.content), p.risk ? h('section', { class: 'info-box' }, h('h3', {}, '風險與挑戰'), h('p', { class: 'pre muted' }, p.risk)) : null, p.returns ? h('section', { class: 'info-box' }, h('h3', {}, '退換貨規則'), h('p', { class: 'pre muted' }, p.returns)) : null, p.contact ? h('section', { class: 'info-box' }, h('h3', {}, '客服聯絡方式'), h('p', { class: 'pre muted' }, p.contact)) : null, p.afteeNote ? h('section', { class: 'info-box' }, h('h3', {}, 'AFTEE 支付相關宣告'), h('p', { class: 'pre muted' }, p.afteeNote)) : null);
   const codeBox = p.hasHidden && !p.codeOk ? h('form', { class: 'card', on: { submit: (e) => { e.preventDefault(); go(`/p/${slug}?code=${encodeURIComponent(e.target.code.value.trim())}`); } } }, h('p', { class: 'muted' }, '有隱藏的回饋選項？輸入密碼看看'), h('input', { name: 'code', placeholder: '隱藏選項密碼' }), h('button', { class: 'btn ghost' }, '確定')) : null;
   const opts = p.options.map((o) => optionCard(p, o, slug, q.code));
+  const sub = p.type === 'subscription';
+  const backBtn = h('button', { class: 'btn big full', on: { click: () => { const el = document.querySelector('.p-right'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } } }, sub ? '訂閱支持' : '贊助專案');
   return h('div', { class: 'project' },
     p.preview ? h('div', { class: 'warn' }, '預覽模式：這個計畫還沒公開，只有團隊和平台人員看得到') : null,
     p.ageLimit === 18 ? h('div', { class: 'warn' }, '本計畫含限制級內容，未滿 18 歲請勿瀏覽與贊助') : null,
+    h('header', { class: 'p-head' }, h('div', { class: 'pmeta' }, `${p.typeName}・${p.category}・提案人 `, link('/u/' + p.ownerSlug, p.owner)), h('h1', {}, p.title), h('p', {}, p.description)),
     h('div', { class: 'p-top' },
       h('div', { class: 'p-media' }, p.cover ? media({ url: p.cover }, 'cover') : h('div', { class: 'cover ph big' }, p.title.slice(0, 4))),
-      h('div', { class: 'p-info' }, h('div', { class: 'muted' }, `${p.typeName}｜${p.category}｜By `, link('/u/' + p.ownerSlug, p.owner)), h('h1', {}, p.title), h('p', {}, p.description),
-        p.type === 'subscription' ? h('div', { class: 'big-num' }, money(p.monthly), h('small', {}, ' / 本月')) : [h('div', { class: 'big-num' }, money(p.raised)), h('div', { class: 'muted' }, `目標 ${money(p.goal)}`), h('div', { class: 'progress' }, h('i', { style: { width: Math.min(100, p.percent) + '%' } })), h('div', { class: 'p-stats' }, h('span', {}, h('b', {}, p.percent + '%'), ' 達成'), h('span', {}, h('b', {}, num(p.backers)), ' 人贊助'), h('span', {}, h('b', {}, p.status === 'live' ? p.left : p.statusName)))],
-        h('div', { class: 'muted small' }, p.type === 'subscription' ? `${dt(p.startAt, false)} 開始・長期訂閱` : `${dt(p.startAt)} ～ ${dt(p.endAt)}`),
-        h('div', { class: 'row' }, followBtn, share, contact, p.canManage ? link(`/c/${p.id}`, '管理計畫後台', 'btn') : null))),
+      h('div', { class: 'p-info' },
+        sub ? [h('div', { class: 'big-num' }, money(p.monthly), h('small', {}, ' / 本月')), h('div', { class: 'p-goal' }, '每月定期護持')]
+          : [h('div', { class: 'big-num' }, money(p.raised)), h('div', { class: 'p-goal' }, `目標 ${money(p.goal)}`), h('div', { class: 'progress' }, h('i', { style: { width: Math.min(100, p.percent) + '%' } }))],
+        h('div', { class: 'p-stats' }, sub ? null : h('span', {}, '達成', h('b', {}, p.percent + '%')), h('span', {}, '贊助人數', h('b', {}, num(p.backers))), h('span', {}, sub ? '狀態' : '剩餘時間', h('b', {}, sub ? '長期訂閱' : p.status === 'live' ? p.left : p.statusName))),
+        h('div', { class: 'p-period' }, sub ? `${dt(p.startAt, false)} 開始・長期訂閱` : `募資期間 ${dt(p.startAt)} – ${dt(p.endAt)}`),
+        p.status === 'live' ? backBtn : null,
+        h('div', { class: 'p-actions' }, followBtn, share, contact),
+        p.canManage ? link(`/c/${p.id}`, '管理計畫後台', 'btn dark full') : null)),
+    h('div', { class: 'tabs-bar' }, h('nav', { class: 'tabs' }, T('story', '專案內容'), T('updates', `計畫更新 ${p.updates.length}`), T('comments', `留言 ${p.comments.length}`), T('faqs', `常見問答 ${p.faqs.length}`), T('backers', `贊助人 ${num(p.backers)}`))),
     h('div', { class: 'p-main' },
-      h('div', { class: 'p-left' }, h('nav', { class: 'tabs' }, T('story', '專案內容'), T('updates', `計畫更新 ${p.updates.length}`), T('comments', `留言 ${p.comments.length}`), T('faqs', `常見問答 ${p.faqs.length}`), T('backers', `贊助人 ${p.backers}`)), body, h('div', { class: 'tr' }, report)),
-      h('aside', { class: 'p-right' }, codeBox, opts.length ? opts : h('p', { class: 'muted' }, '提案人還沒設定回饋'))));
+      h('div', { class: 'p-left' }, body, h('div', { class: 'tr' }, report)),
+      h('aside', { class: 'p-right' }, h('h3', {}, sub ? '選擇訂閱方案' : '選擇回饋方案'), codeBox, opts.length ? opts : h('p', { class: 'muted' }, '提案人還沒設定回饋'))));
 });
 function optionCard(p, o, slug, code) {
   const soldOut = o.left === 0, canBack = p.status === 'live' && !soldOut;
@@ -83,7 +97,7 @@ function optionCard(p, o, slug, code) {
     o.media.length ? h('div', { class: 'omedia' }, o.media.map((m) => media(m))) : null,
     h('div', { class: 'oprice' }, money(o.price), o.retail > o.price ? h('s', { class: 'muted' }, money(o.retail)) : null, p.type === 'subscription' ? h('small', {}, ' / 每月') : null),
     h('h4', {}, o.name, o.hidden ? badge('隱藏選項', 'gold') : null),
-    h('div', { class: 'small muted' }, `${num(o.taken)} 人贊助`, o.left !== null ? `・剩 ${num(o.left)} 份` : '', o.shipMonth ? `・預計 ${o.shipMonth.replace('-', ' 年 ')} 月出貨` : ''),
+    h('div', { class: 'ometa' }, h('span', {}, h('b', {}, num(o.taken)), ' 人已贊助'), o.left !== null ? h('span', {}, `剩 ${num(o.left)} 份`) : null, o.shipMonth ? h('span', {}, `預計 ${o.shipMonth.replace('-', ' 年 ')} 月寄出`) : null),
     markup(o.description),
     h('div', { class: 'small muted' }, [o.atm ? '可 ATM 轉帳' : '', o.installment ? `信用卡可分 ${o.installment} 期` : '', o.stores.length ? '可超商取貨' : ''].filter(Boolean).join('・')),
     soldOut ? badge('已額滿', 'gray') : p.status === 'live' ? h('button', { class: 'btn full' }, p.type === 'subscription' ? '訂閱這個方案' : '贊助這個回饋') : badge(p.statusName || '未開放', 'gray'));
@@ -159,7 +173,7 @@ route('/p/:slug/checkout', async ({ slug }, q) => {
       invoice: { type: inv.type.value, carrier: inv.carrier.value, ubn: inv.ubn.value, title: inv.title.value, donate: inv.donate.value }, referrer: sessionStorage.getItem('ref:' + slug) || '', age18: age.checked };
     submit.disabled = true; const r = await act(() => api('/api/orders', body), ''); submit.disabled = false;
     if (r) go(`/orders/${r.token}/pay`);
-  } } }, '確認並前往付款');
+  } } }, state.demo ? '確認並前往付款' : '確認並保留訂單');
   quote();
   return h('div', { class: 'checkout' }, h('h1', {}, '贊助：' + p.title),
     h('div', { class: 'co-grid' },
@@ -170,22 +184,25 @@ route('/p/:slug/checkout', async ({ slug }, q) => {
           main.coupon ? h('div', { class: 'row' }, couponIn, h('button', { class: 'btn ghost', on: { click: async () => { S.coupon = couponIn.value.trim(); const a = await quote(); if (a && a.discount) toast('折扣碼可以用'); } } }, '套用')) : null),
         h('section', { class: 'card' }, h('h3', {}, '2. 收件資料'), field('寄送地區', region), deliveryBox, h('div', { class: 'grid3' }, field('收件人姓名', R.name), field('電話', R.phone), field('Email', R.email))),
         h('section', { class: 'card' }, h('h3', {}, '3. 回饋調查與備註'), surveyBox, main.hasNote ? field('備註' + (main.noteRequired ? '（必填）' : ''), note) : null),
-        h('section', { class: 'card' }, h('h3', {}, '4. 付款方式'), payBox, instBox, h('p', { class: 'small muted' }, 'ATM 轉帳：訂單成立隔天 23:59:59 前付款都可以過單。這是練習平台，不會真的扣款。')),
+        h('section', { class: 'card' }, h('h3', {}, '4. 付款方式'), payBox, instBox, h('p', { class: 'small muted' }, state.demo ? 'ATM 轉帳：訂單成立隔天 23:59:59 前付款。' : '線上付款尚未開放：送出後訂單會先保留，不會扣款；開放後會通知你。')),
         invBox,
         p.ageLimit === 18 ? field('我已年滿 18 歲', age) : null),
-      h('aside', { class: 'card sticky' }, h('h3', {}, '金額'), sumBox, err, submit, h('p', { class: 'small muted' }, '按下確認代表你同意本計畫的退換貨規則與平台使用條款（練習用）。'))));
+      h('aside', { class: 'card sticky' }, h('h3', {}, '金額'), sumBox, err, submit, h('p', { class: 'small muted' }, '按下確認代表你同意本計畫的退換貨規則與平台使用條款。'))));
 });
 
-// ---------- 付款（模擬金流）----------
+// ---------- 付款 ----------
+// 正式模式還沒串真的金流：只顯示「尚未開放」，不讓人以為付成功（KIRK 選的做法）；測試模式（DEMO=1）才有測試用的付款按鈕
 route('/orders/:token/pay', async ({ token }) => {
   const list = await api('/api/my/orders'); const o = list.find((x) => x.token === token); if (!o) throw new Error('找不到這張訂單');
   if (o.status !== 'pending') return orderDone(o);
-  if (o.payMethod === 'atm') return h('div', { class: 'card center' }, h('h2', {}, 'ATM 虛擬帳號（模擬）'), h('p', {}, '請在期限內轉帳：'), h('div', { class: 'big-num' }, money(o.total)), h('p', {}, '銀行代碼 999（練習銀行）'), h('p', { class: 'mono big' }, o.atmAccount), h('p', {}, '繳費期限：' + dt(o.atmDeadline)),
-    h('button', { class: 'btn', on: { click: async () => { if (await act(() => api(`/api/orders/${token}/atm-paid`, {}), '已收到轉帳')) go(`/orders/${token}/pay`, true); } } }, '我已轉帳（模擬銀行通知）'), ' ', link('/me/orders', '稍後再付', 'btn ghost'));
+  if (!state.demo) return h('div', { class: 'card closed narrow' }, h('h2', {}, '線上付款尚未開放'), h('p', { class: 'muted' }, `訂單 ${o.token} 已保留`), h('div', { class: 'big-num' }, money(o.total)),
+    h('p', {}, '目前還不會扣款。線上付款開放後，我們會通知你回來完成付款。'), h('div', { class: 'row', style: { justifyContent: 'center' } }, o.project ? link('/p/' + o.project.slug, '回計畫頁', 'btn ghost') : null, link('/me/orders', '查看贊助紀錄', 'btn')));
+  if (o.payMethod === 'atm') return h('div', { class: 'card center' }, h('h2', {}, 'ATM 虛擬帳號（測試）'), h('p', {}, '請在期限內轉帳：'), h('div', { class: 'big-num' }, money(o.total)), h('p', {}, '銀行代碼 999'), h('p', { class: 'mono big' }, o.atmAccount), h('p', {}, '繳費期限：' + dt(o.atmDeadline)),
+    h('button', { class: 'btn', on: { click: async () => { if (await act(() => api(`/api/orders/${token}/atm-paid`, {}), '已收到轉帳')) go(`/orders/${token}/pay`, true); } } }, '我已轉帳（測試）'), ' ', link('/me/orders', '稍後再付', 'btn ghost'));
   const last4 = inp('', { maxlength: 4, inputmode: 'numeric', placeholder: '例如 4242' });
-  return h('div', { class: 'card center narrow' }, h('h2', {}, o.payMethod === 'aftee' ? 'AFTEE 先享後付（模擬）' : '信用卡付款（模擬）'), h('div', { class: 'big-num' }, money(o.total)), o.installments ? h('p', {}, `分 ${o.installments} 期，每期約 ${money(Math.ceil(o.total / o.installments))}`) : null,
-    o.payMethod === 'credit' ? field('卡號末四碼（練習用，0002 會被拒絕）', last4) : h('p', {}, '按下付款就算成功（模擬）'),
-    h('button', { class: 'btn big', on: { click: async () => { if (await act(() => api(`/api/orders/${token}/pay`, { last4: last4.value }), '付款成功')) go(`/orders/${token}/pay`, true); } } }, '付款'), h('p', { class: 'small muted' }, '這是練習平台，不會連到真的金流。'));
+  return h('div', { class: 'card center narrow' }, h('h2', {}, o.payMethod === 'aftee' ? 'AFTEE 先享後付（測試）' : '信用卡付款（測試）'), h('div', { class: 'big-num' }, money(o.total)), o.installments ? h('p', {}, `分 ${o.installments} 期，每期約 ${money(Math.ceil(o.total / o.installments))}`) : null,
+    o.payMethod === 'credit' ? field('卡號末四碼（測試：0002 會被拒絕）', last4) : h('p', {}, '按下付款就算成功（測試）'),
+    h('button', { class: 'btn big', on: { click: async () => { if (await act(() => api(`/api/orders/${token}/pay`, { last4: last4.value }), '付款成功')) go(`/orders/${token}/pay`, true); } } }, '付款'));
 });
 function orderDone(o) {
   return h('div', { class: 'card center' }, h('h2', {}, o.status === 'paid' ? '🎉 贊助成功' : o.statusName), h('p', {}, `訂單編號 ${o.token}`), h('div', { class: 'big-num' }, money(o.total)), o.project ? link('/p/' + o.project.slug, '回計畫頁', 'btn ghost') : null, ' ', link('/me/orders', '查看贊助紀錄', 'btn'));
@@ -199,7 +216,7 @@ route('/me/orders', async () => {
     h('ul', { class: 'small' }, o.items.map((it) => h('li', {}, `${it.name} × ${it.qty}　${money(it.price * it.qty)}`)), o.bonus ? h('li', {}, '加碼 ' + money(o.bonus)) : null, o.discount ? h('li', {}, `折扣碼 ${o.coupon} −${money(o.discount)}`) : null, h('li', {}, '運費 ' + money(o.shippingFee))),
     h('div', { class: 'row between' }, h('b', {}, '總金額 ' + money(o.total)), h('span', { class: 'muted small' }, state.meta.payMethods[o.payMethod] + (o.installments ? ` 分 ${o.installments} 期` : ''))),
     o.status === 'pending' && o.payMethod === 'atm' ? h('p', { class: 'warn' }, `請在 ${dt(o.atmDeadline)} 前轉帳到 ${o.atmAccount}`) : null,
-    o.status === 'pending' ? link(`/orders/${o.token}/pay`, '前往付款', 'btn') : null,
+    o.status === 'pending' ? (state.demo ? link(`/orders/${o.token}/pay`, '前往付款', 'btn') : h('p', { class: 'warn' }, '線上付款尚未開放，訂單已保留，開放後會通知你。')) : null,
     o.shipped ? h('p', { class: 'ok' }, `已出貨：${o.shipped.carrier} ${o.shipped.trackNo}（${dt(o.shipped.at)}）`) : null,
     o.status === 'refunded' && o.refundFee ? h('p', { class: 'small muted' }, `退款已扣轉帳手續費 ${money(o.refundFee)}`) : null,
     o.refund ? h('p', { class: 'small' }, `退款申請：${o.refund.statusName}${o.refund.note ? '（' + o.refund.note + '）' : ''}`) : null,
@@ -225,7 +242,7 @@ route('/me/projects', async () => {
 });
 route('/me/mail', async () => {
   const list = await api('/api/my/emails');
-  return h('div', {}, h('h1', {}, '我的信箱（模擬）'), h('p', { class: 'muted' }, '練習平台不會真的寄信，系統寄給你的信都在這裡。'), list.length ? list.map((m) => h('details', { class: 'card' }, h('summary', {}, h('b', {}, m.subject), h('span', { class: 'muted small' }, '　' + dt(m.at))), h('p', { class: 'pre' }, m.body))) : h('p', { class: 'muted' }, '沒有信'));
+  return h('div', {}, h('h1', {}, '通知信箱'), h('p', { class: 'muted' }, '平台寄給你的通知（訂單、計畫更新、訊息）都在這裡。'), list.length ? list.map((m) => h('details', { class: 'card' }, h('summary', {}, h('b', {}, m.subject), h('span', { class: 'muted small' }, '　' + dt(m.at))), h('p', { class: 'pre' }, m.body))) : h('p', { class: 'muted' }, '沒有信'));
 });
 
 // ---------- 個人頁 ----------
@@ -275,11 +292,11 @@ route('/me/inbox/:uid', async ({ uid }) => {
 route('/start', async () => {
   const pick = async (type) => { if (!state.me) return go('/login?next=/start'); const title = await ask('發起計畫', '計畫名稱（之後可以改）'); if (title === undefined) return; const r = await act(() => api('/api/start', { type, title }), '已建立草稿'); if (r) go(`/c/${r.id}`); };
   const card3 = (type, name, sub, points) => h('div', { class: 'card start-card' }, h('h3', {}, name), h('p', {}, sub), h('ul', {}, points.map((x) => h('li', {}, '✓ ' + x))), h('button', { class: 'btn full', on: { click: () => pick(type) } }, '開始提案'));
-  return h('div', {}, h('section', { class: 'hero plain' }, h('h1', {}, '讓好的計畫發生'), h('p', {}, '選一種提案類別開始。發起不用錢，募資成功才收平台手續費和金流費（預設合計 8%，可在平台設定調整）。')),
+  return h('div', {}, h('section', { class: 'hero plain' }, h('h1', {}, '替你熟悉的廟宇發起計畫'), h('p', {}, '選一種計畫類型開始。建立草稿不用錢，我們的專案人員會陪你把內容、回饋、審核一步步完成。')),
     h('div', { class: 'grid3' }, card3('crowd', '群眾集資', '在一定期限內，募集完成計畫所需的資金', ['一次型專案', '建議集資 35～45 天', '專案達成後，一次性回饋贊助者']), card3('preorder', '預購專案', '讓新產品在上市前進行集客預購', ['一次型專案', '平均集資 45～60 天', '專案達成後，一次性回饋贊助者']), card3('subscription', '訂閱專案', '用持續性的計畫，累積每月的贊助', ['長期型專案', '可持續集資到專案結束', '專案進行期間，持續回饋贊助者'])),
     h('section', { class: 'card' }, h('h2', {}, '常見問答'), [
       ['發起募資有什麼身分限制？', '提案人須為本國自然人，或在臺灣註冊的法人、機關團體。'],
-      ['集資目標有限制嗎？', '自然人：任意連續 30 天內上限 100 萬；法人：第一階段上限 1,500 萬（平台設定可調）。'],
+      ['集資目標有限制嗎？', '自然人：任意連續 30 天內上限 100 萬；法人：第一階段上限 1,500 萬。'],
       ['集資時間有限制嗎？', '一次性計畫最短 1 天、最長 5 個月，建議 35～45 天；訂閱專案沒有天期限制。'],
       ['為什麼要經過審核？', '提案後依序經過：商業檔案與金流帳號初審 → 方案與回饋 → 合約簽署與上傳 → 第三方金流單位審核 → 準備上線。審核通過不代表背書，提案人仍須負擔專案責任。'],
       ['發起計畫要付錢嗎？', '不用。集資成功才收：平台手續費 5.5%＋金流基本服務費 2.5%（依付款方式可能不同）。'],
@@ -292,12 +309,12 @@ route('/login', async (_, q) => {
   const em = inp('', { type: 'email', autocomplete: 'username' }), pw = inp('', { type: 'password', autocomplete: 'current-password' });
   const next = q.next && q.next.startsWith('/') && !q.next.startsWith('//') ? q.next : '/';
   const submit = async (e) => { e.preventDefault(); if (await act(() => api('/api/login', { email: em.value, password: pw.value }), '登入成功')) { await loadMe(); go(next); } };
-  return h('form', { class: 'card narrow', on: { submit } }, h('h1', {}, '登入'), field('Email', em), field('密碼', pw), h('button', { class: 'btn full' }, '登入'), h('p', {}, '還沒有帳號？', link('/register?next=' + encodeURIComponent(next), '註冊')),
-    state.demo ? h('div', { class: 'demo' }, h('b', {}, '練習帳號（密碼都是 Demo1234）'), h('ul', {}, [['admin@demo.local', '平台管理員'], ['pm@demo.local', '專案經理'], ['creator@demo.local', '提案人'], ['backer1@demo.local', '贊助人']].map(([e, n]) => h('li', {}, h('button', { type: 'button', class: 'linkbtn', on: { click: () => { em.value = e; pw.value = 'Demo1234'; } } }, e), '　' + n)))) : null);
+  return h('form', { class: 'card auth', on: { submit } }, h('h1', {}, '登入'), field('Email', em), field('密碼', pw), h('button', { class: 'btn full' }, '登入'), h('p', {}, '還沒有帳號？', link('/register?next=' + encodeURIComponent(next), '註冊')),
+    state.demo ? h('div', { class: 'demo' }, h('b', {}, '測試帳號（密碼都是 Demo1234）'), h('ul', {}, [['admin@demo.local', '平台管理員'], ['pm@demo.local', '專案經理'], ['creator@demo.local', '提案人'], ['backer1@demo.local', '贊助人']].map(([e, n]) => h('li', {}, h('button', { type: 'button', class: 'linkbtn', on: { click: () => { em.value = e; pw.value = 'Demo1234'; } } }, e), '　' + n)))) : null);
 });
 route('/register', async (_, q) => {
   const em = inp('', { type: 'email', autocomplete: 'username' }), name = inp(''), pw = inp('', { type: 'password', autocomplete: 'new-password' }), nl = chk(false);
   const next = q.next && q.next.startsWith('/') && !q.next.startsWith('//') ? q.next : '/';
   const submit = async (e) => { e.preventDefault(); if (await act(() => api('/api/register', { email: em.value, name: name.value, password: pw.value, newsletter: nl.checked }), '註冊成功')) { await loadMe(); go(next); } };
-  return h('form', { class: 'card narrow', on: { submit } }, h('h1', {}, '註冊'), field('Email', em), field('名稱', name), field('密碼（8～64 字，要有英文和數字）', pw), field('訂閱電子報', nl), h('button', { class: 'btn full' }, '註冊'), h('p', {}, '已經有帳號？', link('/login?next=' + encodeURIComponent(next), '登入')));
+  return h('form', { class: 'card auth', on: { submit } }, h('h1', {}, '註冊'), field('Email', em), field('名稱', name), field('密碼（8～64 字，要有英文和數字）', pw), field('訂閱電子報', nl), h('button', { class: 'btn full' }, '註冊'), h('p', {}, '已經有帳號？', link('/login?next=' + encodeURIComponent(next), '登入')));
 });

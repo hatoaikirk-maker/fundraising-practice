@@ -1,10 +1,10 @@
 /**
- * 把「嘖嘖提案者後台」匯出的 4 個真實計畫，轉成練習平台的範例資料（lib/zeczec_projects.json）
+ * 把「嘖嘖提案者後台」匯出的 4 個真實計畫，轉成人生地圖募資的範例資料（lib/zeczec_projects.json）
  * ------------------------------------------------------------
  * 用法：node tools/convert_zeczec.mjs <zeczec_export.json 的路徑>
  *
  * 匯出檔的格式（KIRK 用 Chrome 在自己的提案者後台「只讀」抓下來的）：
- *   [{ slug, f: { 'project[title]': …, … },  content: 已轉好的練習平台文字格式, cover: 封面網址,
+ *   [{ slug, f: { 'project[title]': …, … },  content: 已轉好的人生地圖募資文字格式, cover: 封面網址,
  *      opts: [{ id, img: 回饋圖片網址, taken: 已被認領數, f: { 'option[name]': …, … } }], pubFaq: [公開常見問答文字…], stats: [...] }]
  *   - 下拉選單的值是「顯示文字|值」，例如 '群眾集資|Sprint'
  *   - 勾選框沒勾是 '0' 或沒有這個欄位；有勾是 ['0','1']（Rails 的 hidden＋checkbox）或 '1'
@@ -34,17 +34,17 @@ const https = (u) => { try { const x = new URL(String(u || '')); return x.protoc
 /** 'YYYY-MM-DD HH:mm'（台灣時間）→ 毫秒 */
 const twTime = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(String(s || '')); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - 8 * 3_600_000 : 0; };
 
-// 嘖嘖的值 → 練習平台的值
+// 嘖嘖的值 → 人生地圖募資的值
 const TYPE = { Sprint: 'crowd', Preorder: 'preorder', Subscription: 'subscription' };
 const INVOICE = { einvoice: 'cloud', paper: 'paper' };
 const ORDER = { desc: 'priceDesc', asc: 'priceAsc' };
 const STORE = { '01': '711', '02': 'family', '03': 'hilife' };   // 嘖嘖超商代碼（01＝7-11）
-const SLUG = { moga: 'moga', Sihu: 'sihu', Hsu: 'hsu', PRAY: 'pray' }; // 練習平台網址代稱只收小寫
+const SLUG = { moga: 'moga', Sihu: 'sihu', Hsu: 'hsu', PRAY: 'pray' }; // 人生地圖募資網址代稱只收小寫
 
 /**
  * 內容清理：
  * - 拿掉 ![](null)（嘖嘖上傳失敗的空圖）、空的「## 」標題
- * - 拿掉 countdownmail 的倒數 GIF：那是第三方伺服器即時畫的「真實」倒數，跟練習平台的模擬時鐘對不上，而且每次載入都會打到外部服務
+ * - 拿掉 countdownmail 的倒數 GIF：那是第三方伺服器即時畫的「真實」倒數，跟人生地圖募資的模擬時鐘對不上，而且每次載入都會打到外部服務
  * - 圖片／影片網址只留 https
  */
 function cleanContent(c) {

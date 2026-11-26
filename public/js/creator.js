@@ -163,7 +163,7 @@ route('/c/:pid/edm', async (x) => shell(pidOf(x), 'edm', async (d) => {
   const preview = h('div', { class: 'card mail-pv' });
   const drawPv = () => preview.replaceChildren(h('div', { class: 'small muted' }, '預覽'), h('b', {}, F.subject.value || '（信件標題）'), h('div', { class: 'small muted' }, F.preheader.value), h('h3', {}, F.title.value), h('p', {}, F.subtitle.value), h('ul', {}, feats.filter((f) => f.value).map((f) => h('li', {}, f.value))), coupon.value !== '0' ? h('p', {}, '折扣碼：' + coupon.selectedOptions[0].textContent) : null, h('span', { class: 'btn' }, F.cta.value || '回去看看'));
   for (const e of [...Object.values(F), ...feats, coupon]) e.addEventListener('input', drawPv); drawPv();
-  return h('div', {}, h('h1', {}, '未結帳 EDM 再行銷設定'), h('p', { class: 'small muted' }, `進到結帳頁但沒有完成贊助的人，1 小時後自動寄一封提醒信（模擬寄信，收件人在「我的信箱」看得到）。目前：開始結帳 ${a.stats.started} 人、已轉換 ${a.stats.converted} 人、已寄提醒 ${a.stats.reminded} 封。`),
+  return h('div', {}, h('h1', {}, '未結帳 EDM 再行銷設定'), h('p', { class: 'small muted' }, `進到結帳頁但沒有完成贊助的人，1 小時後自動寄一封提醒信（收件人在「通知信箱」看得到）。目前：開始結帳 ${a.stats.started} 人、已轉換 ${a.stats.converted} 人、已寄提醒 ${a.stats.reminded} 封。`),
     h('div', { class: 'grid2' }, h('section', { class: 'card' }, h('h2', {}, '信件標題'), field('信件標題', F.subject), field('預覽文字', F.preheader), h('h2', {}, '信件內容'), field('主標題', F.title), field('副標題', F.subtitle), field('行動呼籲', F.cta), h('h2', {}, '產品特色'), feats, h('h2', {}, '折扣碼'), a.coupons.length ? coupon : h('p', { class: 'small muted' }, '沒有有效的自動化行銷用折扣碼（建立折扣碼時勾「可用於未結帳 EDM」）'), h('h2', {}, '啟用'), field('每日自動寄送', enabled),
       h('button', { class: 'btn', on: { click: () => act(() => api(`/api/c/${pid}/abandon`, { ...Object.fromEntries(Object.entries(F).map(([k, e]) => [k, e.value])), features: feats.map((f) => f.value), couponId: Number(coupon.value), enabled: enabled.checked })) } }, '儲存')), preview));
 }));
@@ -247,7 +247,7 @@ route('/c/:pid/business', async (x) => shell(pidOf(x), 'business', async (d) => 
     h('section', { class: 'card' }, h('h2', {}, '聯絡資訊'), h('div', { class: 'grid3' }, field('連絡電話號碼', F.phone), field('縣市', F.city), field('鄉鎮市區', F.district), field('郵遞區號', F.zip)), field('街道與門牌', F.address), field('法人登記地址（個人申請時，請填戶籍地址）', F.regAddress)),
     h('section', { class: 'card' }, h('h2', {}, '銀行帳戶資訊'), h('div', { class: 'grid3' }, field('銀行戶名', F.bankName), field('銀行代碼', F.bankCode), field('銀行分行代碼', F.bankBranch), field('銀行帳號', F.bankAccount))),
     locked ? h('p', { class: 'muted' }, b.status === 'pending' ? '審核中，不能修改' : '已審核通過；要修改請聯繫專案經理') : h('div', { class: 'row' }, h('button', { class: 'btn ghost', on: { click: () => save(false) } }, '儲存草稿'), h('button', { class: 'btn', on: { click: () => save(true) } }, '送出審核')),
-    h('p', { class: 'small muted' }, '練習平台：請不要填真實的身分證字號和銀行帳號，用範例資料就好。商業檔案和金流帳號都送出後，才會進入「商業檔案與金流帳號初審」。'));
+    h('p', { class: 'small muted' }, '這些資料只有你的團隊和平台人員看得到。商業檔案和金流帳號都送出後，才會進入「商業檔案與金流帳號初審」。'));
 }));
 
 // ---------- 金流帳號申請 ----------

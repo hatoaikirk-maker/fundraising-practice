@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node test/rules_test.mjs && node test/api_test.mjs && node test/ui_test.mjs"
+    "test": "node test/rules_test.mjs && node test/api_test.mjs && node test/prod_test.mjs && node test/ui_test.mjs"
   },
   "license": "UNLICENSED",
   "devDependencies": {

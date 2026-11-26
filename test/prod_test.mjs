@@ -1,0 +1,87 @@
+/**
+ * 正式模式測試（沒有 DEMO=1）：對外募資平台該有的樣子
+ * - 只有 4 個真實計畫；沒有測試帳號、測試計畫；任何 API 回應都不會出現「練習／模擬」
+ * - 管理員帳號密碼來自環境變數；測試帳號 Demo1234 登不進去
+ * - 線上付款關閉：信用卡、ATM 付款 API 一律拒絕，訂單只會保留不會變成已付款
+ * - 時鐘快轉、重置在正式模式不存在（404）
+ * - 管理員可以新增一般人員；一般人員看不到人員、撥款、設定；臨時密碼只回一次、伺服器只存雜湊
+ */
+import { spawn } from 'node:child_process';
+import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
+let pass = 0, fail = 0; const ok = (c, n) => { if (c) pass++; else { fail++; console.log('  ✗ ' + n); } };
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PORT = 21000 + Math.floor(Math.random() * 20000), B = `http://127.0.0.1:${PORT}`;
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fpp-prod-'));
+const ADMIN = 'boss@lifemap.local', ADMIN_PW = 'Pr0d-' + Math.random().toString(36).slice(2, 12);   // 每次測試亂數，不寫死任何密碼
+const srv = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { PATH: process.env.PATH, PORT: String(PORT), DATA_DIR: dir, ADMIN_EMAIL: ADMIN, ADMIN_PASSWORD: ADMIN_PW }, stdio: ['ignore', 'pipe', 'pipe'] });
+let log = ''; srv.stdout.on('data', (d) => { log += d; }); srv.stderr.on('data', (d) => { log += d; });
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+function client() {
+  let cookie = '', csrf = '';
+  const c = {
+    async req(method, p, body) {
+      const headers = { ...(cookie ? { cookie } : {}) };
+      if (method !== 'GET') { headers['x-csrf'] = csrf; headers['content-type'] = 'application/json'; }
+      const r = await fetch(B + p, { method, headers, body: method === 'GET' ? undefined : JSON.stringify(body || {}) });
+      const sc = r.headers.get('set-cookie'); if (sc) cookie = sc.split(';')[0];
+      let j = null, t = ''; try { t = await r.text(); j = JSON.parse(t); } catch { /* */ }
+      return { s: r.status, j, t };
+    },
+    async me() { const r = await c.req('GET', '/api/me'); csrf = r.j.csrf; return r.j; },
+    get: (p) => c.req('GET', p), post: (p, b) => c.req('POST', p, b),
+    async login(email, password) { await c.me(); const r = await c.post('/api/login', { email, password }); await c.me(); return r; },
+  };
+  return c;
+}
+try {
+  for (let i = 0; i < 60; i++) { await wait(200); try { if ((await fetch(B + '/api/me')).ok) break; } catch { /* */ } }
+  const anon = client(); const me0 = await anon.me();
+  ok(me0.demo === false, '正式模式：/api/me 的 demo＝false');
+  ok(!log.includes(ADMIN_PW), '有設 ADMIN_PASSWORD 時，啟動畫面不會印出密碼');
+  // ---------- 只有真實計畫、沒有練習字樣 ----------
+  const home = (await anon.get('/api/home')).t;
+  const hj = JSON.parse(home);
+  const slugs = [...hj.crowd, ...hj.subscription, ...hj.preorder].map((p) => p.slug).sort();
+  ok(JSON.stringify(slugs) === JSON.stringify(['hsu', 'moga', 'pray', 'sihu']), '首頁只有 4 個真實計畫：' + slugs.join(','));
+  ok(!/練習|模擬|範例|demo-/.test(home), '首頁資料沒有「練習／模擬／範例」');
+  for (const s of ['moga', 'sihu', 'hsu', 'pray']) { const r = await anon.get('/api/p/' + s); ok(r.s === 200 && !/練習|模擬/.test(r.t) && r.j.owner === '人生地圖', `計畫 ${s}：提案人＝人生地圖、沒有練習字樣`); }
+  ok((await anon.get('/api/p/demo-light-wall')).s === 404, '測試計畫在正式模式不存在');
+  ok((await anon.get('/api/projects?q=' + encodeURIComponent('範例'))).j.total === 0, '搜尋「範例」找不到東西');
+  // ---------- 帳號 ----------
+  ok((await client().login('admin@demo.local', 'Demo1234')).s === 400, '測試帳號 admin@demo.local／Demo1234 登不進去');
+  ok((await client().login('lifemap@lifemap.local', '')).s === 400, '計畫擁有者帳號（人生地圖）沒有密碼、登不進去');
+  const ad = client(); ok((await ad.login(ADMIN, ADMIN_PW)).s === 200 && (await ad.me()).user.role === 'admin', '管理員用環境變數的帳密登入');
+  // ---------- 付款關閉 ----------
+  const bk = client(); await bk.me();
+  ok((await bk.post('/api/register', { email: 'fan.real@example.com', name: '信眾', password: 'Abcd1234' })).s === 200, '一般人可以註冊');
+  await bk.me();
+  const p = (await bk.get('/api/p/moga')).j, o1 = p.options.find((o) => o.atm) || p.options[0];
+  const order = await bk.post('/api/orders', { slug: 'moga', items: [{ optionId: o1.id, qty: 1 }], payMethod: 'credit', region: 'TW', delivery: 'home', recipient: { name: '信眾', phone: '0911222333', email: 'fan.real@example.com', zip: '100', city: '台北市', district: '中正區', address: '某路 1 號' }, survey: Object.fromEntries((o1.survey || []).map((q, i) => [`${o1.id}_${i}`, q.type === 'choice' ? q.choices[0] : '王小明'])), note: '平安', invoice: { type: 'member' } });
+  ok(order.s === 200 && order.j.token, '下單：訂單可以建立（保留）' + (order.s !== 200 ? JSON.stringify(order.j) : ''));
+  const tok = order.j && order.j.token;
+  const pay = await bk.post(`/api/orders/${tok}/pay`, { last4: '4242' });
+  ok(pay.s === 400 && /尚未開放/.test(pay.j.error), '信用卡付款：拒絕（線上付款尚未開放）');
+  ok((await bk.post(`/api/orders/${tok}/atm-paid`, {})).s === 400, 'ATM「我已轉帳」：拒絕');
+  ok((await bk.get('/api/my/orders')).j.find((x) => x.token === tok).status === 'pending', '訂單維持待付款，不會變成已付款');
+  // ---------- 正式模式沒有時鐘、重置 ----------
+  ok((await ad.post('/api/admin/clock', { hours: 24 })).s === 404 && (await ad.post('/api/admin/reset', { confirm: 'RESET' })).s === 404, '時鐘快轉、重置：正式模式 404');
+  // ---------- 管理員 vs 一般人員 ----------
+  const add = await ad.post('/api/admin/users', { email: 'staff1@lifemap.local', name: '小編', role: 'staff' });
+  ok(add.s === 200 && typeof add.j.tempPassword === 'string' && add.j.tempPassword.length >= 8, '管理員新增一般人員：拿到臨時密碼');
+  ok((await ad.post('/api/admin/users', { email: 'staff1@lifemap.local', name: '小編', role: 'staff' })).s === 400, '同一個 Email 不能新增兩次');
+  ok((await ad.post('/api/admin/users', { email: 'x@lifemap.local', name: 'x', role: 'superuser' })).s === 400, '亂填角色：擋下');
+  const st = client(); ok((await st.login('staff1@lifemap.local', add.j.tempPassword)).s === 200, '一般人員用臨時密碼登入');
+  ok((await st.get('/api/admin/review')).s === 200 && (await st.get('/api/admin/orders')).s === 200, '一般人員：可以審核、看訂單');
+  ok((await st.get('/api/admin/users')).s === 404 && (await st.get('/api/admin/payouts')).s === 404 && (await st.post('/api/admin/settings', {})).s === 404 && (await st.post('/api/admin/users', { email: 'y@x.tw', name: 'y', role: 'admin' })).s === 404, '一般人員：不能管人員、撥款、設定，也不能自己新增管理員');
+  ok((await bk.post('/api/admin/users', { email: 'z@x.tw', name: 'z', role: 'admin' })).s === 404, '一般會員：新增人員 404');
+  const sid = add.j.id;
+  const rp = await ad.post(`/api/admin/users/${sid}`, { action: 'resetpw' });
+  ok(rp.s === 200 && rp.j.tempPassword && rp.j.tempPassword !== add.j.tempPassword && rp.j.tempPassword !== 'Demo1234', '重設密碼：產生新的臨時密碼（不是固定的 Demo1234）');
+  ok((await st.get('/api/admin/review')).s === 401, '重設密碼後，那個人原本的登入被登出（要重新登入）');
+  await wait(1300);
+  const db = fs.readFileSync(path.join(dir, 'db.json'), 'utf8');
+  ok(!db.includes(rp.j.tempPassword) && !db.includes(ADMIN_PW), '資料檔裡找不到任何明文密碼');
+} catch (e) { fail++; console.log('  ✗ 測試中斷：' + (e && e.stack || e)); }
+finally { srv.kill(); await wait(200); fs.rmSync(dir, { recursive: true, force: true }); }
+console.log(`正式模式：通過 ${pass}、失敗 ${fail}`);
+process.exit(fail ? 1 : 0);

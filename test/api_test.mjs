@@ -8,7 +8,7 @@ let pass = 0, fail = 0; const ok = (c, n) => { if (c) pass++; else { fail++; con
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 21000 + Math.floor(Math.random() * 20000), B = `http://127.0.0.1:${PORT}`;
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fpp-'));
-const srv = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { PATH: process.env.PATH, PORT: String(PORT), DATA_DIR: dir }, stdio: ['ignore', 'pipe', 'pipe'] });
+const srv = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { PATH: process.env.PATH, PORT: String(PORT), DATA_DIR: dir, DEMO: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let log = ''; srv.stdout.on('data', (d) => { log += d; }); srv.stderr.on('data', (d) => { log += d; });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 

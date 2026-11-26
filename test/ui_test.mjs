@@ -10,7 +10,7 @@ let pass = 0, fail = 0; const ok = (c, n) => { if (c) pass++; else { fail++; con
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 21000 + Math.floor(Math.random() * 20000), B = `http://127.0.0.1:${PORT}`;
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fpp-ui-'));
-const srv = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { PATH: process.env.PATH, PORT: String(PORT), DATA_DIR: dir }, stdio: 'ignore' });
+const srv = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { PATH: process.env.PATH, PORT: String(PORT), DATA_DIR: dir, DEMO: '1' }, stdio: 'ignore' });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 for (let i = 0; i < 60; i++) { await wait(200); try { if ((await fetch(B + '/api/me')).ok) break; } catch { /* */ } }
 
@@ -45,7 +45,7 @@ try {
   await until(() => view());
   // ---------- 前台（沒登入）----------
   await visit('/', '群眾集資');
-  ok(W.document.querySelector('.ribbon').textContent.includes('模擬'), '頁首：練習平台提示');
+  ok(W.document.querySelector('.logo').textContent.includes('人生地圖') && !/練習|模擬/.test(W.document.body.textContent), '頁首：人生地圖募資；全站沒有「練習／模擬」字樣');
   await visit('/explore', '探索');
   await visit('/explore?type=subscription', '每月點一盞平安燈');
   // 嘖嘖移植的計畫：圖片、GIF、Vimeo（不公開連結要帶 h=）、回饋圖片
@@ -67,7 +67,7 @@ try {
   await visit('/help/payment', '撥款');
   await visit('/u/creator', '麥睿示範提案人');
   await visit('/me/orders', '請先登入');
-  await visit('/login', '練習帳號');
+  await visit('/login', '測試帳號');
   // ---------- 贊助人：結帳 ----------
   await login('backer3@demo.local');
   const p = await core.api('/api/p/demo-light-wall');
@@ -106,11 +106,11 @@ try {
   click('.tool', '預覽'); ok(!!W.document.querySelector('.preview .rich'), '編輯器：預覽畫得出來');
   // ---------- 平台後台：每一頁 ----------
   await login('admin@demo.local');
-  for (const [k, word] of [['', '總覽'], ['/review', '提案審核'], ['/projects', '計畫管理'], ['/orders', '訂單管理'], ['/refunds', '退款處理'], ['/reports', '檢舉處理'], ['/comments', '留言管理'], ['/notices', '首頁公告'], ['/users', '會員管理'], ['/payouts', '撥款結算'], ['/settings', '平台設定'], ['/emails', '寄信紀錄'], ['/audit', '操作紀錄'], ['/clock', '模擬時鐘']]) await visit('/admin' + k, word);
+  for (const [k, word] of [['', '總覽'], ['/review', '提案審核'], ['/projects', '計畫管理'], ['/orders', '訂單管理'], ['/refunds', '退款處理'], ['/reports', '檢舉處理'], ['/comments', '留言管理'], ['/notices', '首頁公告'], ['/users', '人員與會員'], ['/payouts', '撥款結算'], ['/settings', '平台設定'], ['/emails', '寄信紀錄'], ['/audit', '操作紀錄'], ['/clock', '時鐘與重置']]) await visit('/admin' + k, word);
   ok(text().includes('快轉 1 天'), '模擬時鐘：快轉按鈕');
   // 專案經理看不到 admin 限定的選單
   await login('pm@demo.local'); await visit('/admin', '總覽');
-  ok(![...W.document.querySelectorAll('.side-a')].some((a) => a.textContent === '撥款結算'), '專案經理：看不到撥款、設定這些選單');
+  ok(![...W.document.querySelectorAll('.side-a')].some((a) => a.textContent === '撥款結算') && W.document.querySelector('.role-tag').textContent === '一般人員', '一般人員：看不到撥款、設定這些選單，標示「一般人員」');
   // XSS：留言放 HTML，畫面只會顯示成字
   await login('backer1@demo.local');
   await core.api('/api/p/demo-light-wall/comments', { body: '<img src=x onerror="window.__xss=1"><script>window.__xss=1</script>' });

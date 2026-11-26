@@ -1,6 +1,7 @@
 @echo off
 chcp 65001 >nul
-rem Start the practice platform on this computer: http://localhost:3000
+rem Start the fundraising site on this computer: http://localhost:3000
+rem Data is kept in data\site (first run prints the admin password in this window).
 cd /d "%~dp0"
 where node >nul 2>nul
 if errorlevel 1 (
@@ -8,6 +9,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+set DATA_DIR=data\site
 start "" http://localhost:3000
 node server.js
 pause
