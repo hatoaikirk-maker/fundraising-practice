@@ -13,7 +13,8 @@ const MENU = [
 /** 外框：左邊選單＋右邊內容 */
 async function shell(pid, key, content) {
   const d = await api(`/api/c/${pid}`), p = d.project;
-  const side = h('nav', { class: 'side' }, h('div', { class: 'side-h' }, badge(p.typeName), h('b', {}, p.title), h('div', { class: 'muted small' }, `#${p.id}　`, link('/p/' + p.slug, '前台頁面 ↗'))),
+  const staff = state.me && state.me.role !== 'member';
+  const side = h('nav', { class: 'side' }, staff ? link('/admin/projects', '← 回上架後台（計畫管理）', 'side-a back') : null, h('div', { class: 'side-h' }, badge(p.typeName), h('b', {}, p.title), h('div', { class: 'muted small' }, `#${p.id}　`, link('/p/' + p.slug, '前台頁面 ↗'))),
     MENU.map(([k, label]) => link(`/c/${pid}${k ? '/' + k : ''}`, label, 'side-a' + (k === key ? ' on' : ''))));
   return h('div', { class: 'dash' }, side, h('div', { class: 'dash-main' }, await content(d)));
 }

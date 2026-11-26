@@ -6,18 +6,26 @@
  * 權限一律在伺服器再檢查一次；這裡只是把看不到的選單藏起來。
  * 測試模式（DEMO=1）才有「時鐘與重置」。
  */
-import { h, link, go, api, state, toast, act, modal, ask, money, num, dt, dtInput, ago, field, inp, area, sel, chk, table, badge, markup, route } from './core.js';
+import { h, link, go, api, state, loadMe, toast, act, modal, ask, money, num, dt, dtInput, ago, field, inp, area, sel, chk, table, badge, markup, route } from './core.js';
 
 // [網址, 名稱, 只有管理員看得到, 只有測試模式才有]
 const MENU = [['', '總覽'], ['projects', '計畫管理'], ['inquiries', '合作申請'], ['review', '審核流程'], ['orders', '訂單管理'], ['refunds', '退款處理'], ['reports', '檢舉處理'], ['comments', '留言管理'], ['notices', '首頁公告'],
   ['users', '人員與會員', true], ['site', '首頁內容', true], ['payouts', '撥款結算', true], ['settings', '平台設定', true], ['emails', '寄信紀錄', true], ['audit', '操作紀錄', true], ['clock', '時鐘與重置（測試模式）', true, true]];
 const ROLE_NAMES = { member: '一般會員', staff: '一般人員', admin: '管理員' };
 async function shell(key, content) {
+  // 後台只有一個入口：/admin（KIRK：「我要從哪裡登入」）——沒登入就直接在這裡登入，登入後回到這一頁
+  if (!state.me) return adminLogin();
+  if (state.me.role === 'member') return h('div', { class: 'card closed narrow' }, h('h2', {}, '這個帳號沒有後台權限'), h('p', { class: 'muted' }, '後台只給人生地圖的平台人員使用。'), link('/', '回首頁', 'btn'));
   const isAdmin = state.me && state.me.role === 'admin';
-  const side = h('nav', { class: 'side admin' }, h('div', { class: 'side-h' }, h('b', {}, '平台管理後台'), h('div', { class: 'small muted' }, state.me ? state.me.name : ''), h('span', { class: 'role-tag' + (isAdmin ? '' : ' staff') }, isAdmin ? '管理員' : '一般人員')), MENU.filter((m) => (!m[2] || isAdmin) && (!m[3] || state.demo)).map(([k, label]) => link(`/admin${k ? '/' + k : ''}`, label, 'side-a' + (k === key ? ' on' : ''))));
+  const side = h('nav', { class: 'side admin' }, h('div', { class: 'side-h' }, h('b', {}, '募資上架後台'), h('div', { class: 'small muted' }, state.me ? state.me.name : ''), h('span', { class: 'role-tag' + (isAdmin ? '' : ' staff') }, isAdmin ? '管理員' : '一般人員')), MENU.filter((m) => (!m[2] || isAdmin) && (!m[3] || state.demo)).map(([k, label]) => link(`/admin${k ? '/' + k : ''}`, label, 'side-a' + (k === key ? ' on' : ''))));
   return h('div', { class: 'dash' }, side, h('div', { class: 'dash-main' }, await content()));
 }
 const reload = () => go(location.pathname + location.search, true);
+function adminLogin() {
+  const em = inp('', { type: 'email', autocomplete: 'username' }), pw = inp('', { type: 'password', autocomplete: 'current-password' });
+  return h('form', { class: 'card auth', on: { submit: async (e) => { e.preventDefault(); if (await act(() => api('/api/login', { email: em.value, password: pw.value }), '登入成功')) { await loadMe(); reload(); } } } },
+    h('h1', {}, '募資上架後台'), h('p', { class: 'muted tc' }, '人生地圖平台人員登入'), field('Email', em), field('密碼', pw), h('button', { class: 'btn full big' }, '登入後台'));
+}
 
 route('/admin', async () => shell('', async () => {
   const d = await api('/api/admin/overview');
@@ -139,11 +147,12 @@ route('/admin/settings', async () => shell('settings', async () => {
   const s = await api('/api/admin/settings');
   const F = { platformFee: inp(s.platformFee, { type: 'number', step: '0.001' }), credit: inp(s.paymentFee.credit, { type: 'number', step: '0.001' }), atm: inp(s.paymentFee.atm, { type: 'number', step: '0.001' }), aftee: inp(s.paymentFee.aftee, { type: 'number', step: '0.001' }),
     personLimit30d: inp(s.personLimit30d, { type: 'number' }), companyLimit: inp(s.companyLimit, { type: 'number' }), payoutWorkdays: inp(s.payoutWorkdays, { type: 'number' }), subscriptionPayoutDay: inp(s.subscriptionPayoutDay, { type: 'number' }), minDays: inp(s.minDays, { type: 'number' }), maxDays: inp(s.maxDays, { type: 'number' }), atmRefundFee: inp(s.atmRefundFee, { type: 'number' }),
-    aonCrowd: chk(s.allOrNothing.crowd), aonPre: chk(s.allOrNothing.preorder), aonCoop: chk(s.allOrNothing.coop), categories: area(s.categories.join('\n'), 8) };
-  const save = () => act(() => api('/api/admin/settings', { platformFee: Number(F.platformFee.value), paymentFee: { credit: Number(F.credit.value), atm: Number(F.atm.value), aftee: Number(F.aftee.value) }, personLimit30d: Number(F.personLimit30d.value), companyLimit: Number(F.companyLimit.value), payoutWorkdays: Number(F.payoutWorkdays.value), subscriptionPayoutDay: Number(F.subscriptionPayoutDay.value), minDays: Number(F.minDays.value), maxDays: Number(F.maxDays.value), atmRefundFee: Number(F.atmRefundFee.value), allOrNothing: { crowd: F.aonCrowd.checked, preorder: F.aonPre.checked, coop: F.aonCoop.checked }, categories: F.categories.value.split('\n') }));
+    aonCrowd: chk(s.allOrNothing.crowd), aonPre: chk(s.allOrNothing.preorder), aonCoop: chk(s.allOrNothing.coop), testPayment: chk(!!s.testPayment), categories: area(s.categories.join('\n'), 8) };
+  const save = () => act(() => api('/api/admin/settings', { platformFee: Number(F.platformFee.value), paymentFee: { credit: Number(F.credit.value), atm: Number(F.atm.value), aftee: Number(F.aftee.value) }, personLimit30d: Number(F.personLimit30d.value), companyLimit: Number(F.companyLimit.value), payoutWorkdays: Number(F.payoutWorkdays.value), subscriptionPayoutDay: Number(F.subscriptionPayoutDay.value), minDays: Number(F.minDays.value), maxDays: Number(F.maxDays.value), atmRefundFee: Number(F.atmRefundFee.value), allOrNothing: { crowd: F.aonCrowd.checked, preorder: F.aonPre.checked, coop: F.aonCoop.checked }, testPayment: F.testPayment.checked, categories: F.categories.value.split('\n') }));
   return h('div', {}, h('h1', {}, '平台設定'), h('section', { class: 'card' }, h('h3', {}, '手續費（小數：0.055＝5.5%）'), h('div', { class: 'grid3' }, field('平台手續費', F.platformFee), field('金流費：信用卡', F.credit), field('金流費：ATM', F.atm), field('金流費：AFTEE', F.aftee), field('ATM 退款轉帳手續費（元）', F.atmRefundFee))),
     h('section', { class: 'card' }, h('h3', {}, '集資上限與時程'), h('div', { class: 'grid3' }, field('自然人 30 天上限', F.personLimit30d), field('法人第一階段上限', F.companyLimit), field('最短天數', F.minDays), field('最長天數', F.maxDays), field('撥款：完結後幾個工作日', F.payoutWorkdays), field('訂閱撥款：次月幾號', F.subscriptionPayoutDay))),
     h('section', { class: 'card' }, h('h3', {}, '沒達標就全部退款（全有或全無）'), field('群眾集資', F.aonCrowd), field('預購式專案', F.aonPre), field('合作式專案', F.aonCoop)),
+    h('section', { class: 'card' }, h('h3', {}, '測試金流'), field('開啟測試金流（付款頁可以操作，但不會真的扣款；訂單標記為測試付款）', F.testPayment), h('p', { class: 'small muted' }, '串好真的金流前，對外正式收單時請關掉：關掉後付款頁會顯示「線上付款尚未開放」。')),
     h('section', { class: 'card' }, h('h3', {}, '分類（一行一個）'), F.categories), h('button', { class: 'btn big', on: { click: save } }, '儲存設定'));
 }));
 route('/admin/emails', async () => shell('emails', async () => { const list = await api('/api/admin/emails'); return h('div', {}, h('h1', {}, '寄信紀錄'), table(['時間', '收件人', '類型', '主旨', '內容'], list.map((m) => [dt(m.at), m.to, m.kind, m.subject, h('details', {}, h('summary', {}, '展開'), h('p', { class: 'pre small' }, m.body))]))); }));

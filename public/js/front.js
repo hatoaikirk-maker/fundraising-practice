@@ -137,7 +137,8 @@ async function reportBox(kind, id) {
 
 // ---------- 結帳 ----------
 route('/p/:slug/checkout', async ({ slug }, q) => {
-  if (!state.me) return go('/login?next=' + encodeURIComponent(location.pathname + location.search), true) || h('div');
+  // 免註冊結帳：沒登入也可以直接填資料下單（KIRK：「消費者剛進來不需要填寫資料」）
+  const me = state.me || { name: '', email: '' };
   const p = await api(`/api/p/${encodeURIComponent(slug)}` + (q.code ? '?code=' + encodeURIComponent(q.code) : ''));
   if (p.status !== 'live') return h('div', { class: 'card center' }, h('h2', {}, '這個計畫現在不能贊助'), link('/p/' + slug, '回計畫頁', 'btn'));
   const main = p.options.find((o) => o.id === Number(q.option)) || p.options[0];
@@ -159,7 +160,7 @@ route('/p/:slug/checkout', async ({ slug }, q) => {
   // 2. 寄送
   const region = sel(state.meta.countries, 'TW', { on: { change: () => { S.region = region.value; quote(); renderDelivery(); } } });
   const deliveryBox = h('div');
-  const R = { name: inp(state.me.name), phone: inp('', { inputmode: 'tel' }), email: inp(state.me.email, { type: 'email' }), zip: inp(''), city: inp(''), district: inp(''), address: inp('') };
+  const R = { name: inp(me.name, { autocomplete: 'name' }), phone: inp('', { inputmode: 'tel', autocomplete: 'tel' }), email: inp(me.email, { type: 'email', autocomplete: 'email' }), zip: inp(''), city: inp(''), district: inp(''), address: inp('') };
   const store = { brand: sel(Object.fromEntries(Object.entries(state.meta.stores).filter(([k]) => main.stores.includes(k)))), id: inp('', { placeholder: '門市代號' }), name: inp('', { placeholder: '門市名稱' }) };
   function renderDelivery() {
     const canStore = main.stores.length && (S.region === 'TW' || S.region === 'TWI');
@@ -183,13 +184,34 @@ route('/p/:slug/checkout', async ({ slug }, q) => {
   const invBox = p.invoiceFormat === 'cloud' ? h('section', { class: 'card' }, h('h3', {}, '5. 發票'), field('發票類型', inv.type), field('手機條碼（選手機條碼時填）', inv.carrier), field('統一編號（選公司統編時填）', inv.ubn), field('公司抬頭', inv.title), field('捐贈碼（選捐贈時填）', inv.donate))
     : p.invoiceFormat === 'paper' ? h('section', { class: 'card' }, h('h3', {}, '5. 發票（傳統發票，隨貨寄出）'), field('抬頭（選填）', inv.title), field('統一編號（選填）', inv.ubn)) : null;
   const age = chk(false);
+  // 收據（正式模式）：一律由廟方開立收據，只問抬頭
+  const receiptTitle = inp('', { placeholder: '空白＝收件人姓名' });
+  const receiptBox = h('section', { class: 'card' }, h('h3', {}, '5. 收據'), h('p', { class: 'small muted' }, '一律由廟方開立收據，隨回饋寄出（無實體回饋的方案另外寄送）。'), field('收據抬頭（選填）', receiptTitle));
+  // 個資告知與同意（個資法第 8、20 條）：隱私權必勾；建立會員、收活動消息各自勾選，預設不勾
+  const privacyOk = chk(!!state.me), register = chk(false), news = chk(false);
+  const consentBox = state.me ? null : h('section', { class: 'card consent' }, h('h3', {}, '6. 確認'),
+    h('label', { class: 'field check' }, privacyOk, h('span', {}, '我已閱讀並同意', link('/help/privacy', '隱私權政策'), '：你填的資料只用來處理這筆訂單、寄送回饋與廟方祈福登錄。')),
+    h('label', { class: 'field check' }, register, h('span', {}, '同時用這組資料建立人生地圖會員（之後可以直接看贊助紀錄、隨時刪除帳號），並同意', link('/help/terms', '會員條款'))),
+    h('label', { class: 'field check' }, news, h('span', {}, '我願意收到人生地圖的法會與活動消息（可隨時取消）')));
   const submit = h('button', { class: 'btn big full', on: { click: async () => {
     if (!S.pay) return toast('請選擇付款方式', 'err');
     const survey = Object.fromEntries(Object.entries(surveyIn).map(([k, e]) => [k, e.value]));
     const body = { ...payload(), payMethod: S.pay, installments: S.pay === 'credit' ? Number(inst.value) : 0, recipient: Object.fromEntries(Object.entries(R).map(([k, e]) => [k, e.value])), store: { brand: store.brand.value, id: store.id.value, name: store.name.value }, survey, note: note.value,
-      invoice: { type: inv.type.value, carrier: inv.carrier.value, ubn: inv.ubn.value, title: inv.title.value, donate: inv.donate.value }, referrer: sessionStorage.getItem('ref:' + slug) || '', age18: age.checked };
-    submit.disabled = true; const r = await act(() => api('/api/orders', body), ''); submit.disabled = false;
-    if (r) go(`/orders/${r.token}/pay`);
+      invoice: state.demo ? { type: inv.type.value, carrier: inv.carrier.value, ubn: inv.ubn.value, title: inv.title.value, donate: inv.donate.value } : { title: receiptTitle.value }, referrer: sessionStorage.getItem('ref:' + slug) || '', age18: age.checked,
+      privacyOk: privacyOk.checked, register: register.checked, newsletter: news.checked };
+    if (!state.me && !privacyOk.checked) return toast('請先勾選同意隱私權政策', 'err');
+    submit.disabled = true;
+    let r = null;
+    try { r = await api('/api/orders', body); } catch (e) {
+      submit.disabled = false;
+      // 這個 Email 已經是會員：請他登入（填好的資料不會消失：登入用彈窗，不換頁）
+      if (e.status === 409) return loginBox(R.email.value, () => submit.click());
+      return toast(e.message, 'err');
+    }
+    submit.disabled = false;
+    // 把訂單資訊（含訪客的 Email、設定密碼連結）放在這個分頁，付款頁、完成頁要用；關掉分頁就沒了
+    sessionStorage.setItem('done:' + r.token, JSON.stringify({ ...r.order, setPassword: r.setPassword, guest: r.guest, email: R.email.value }));
+    await loadMe(); go(`/orders/${r.token}/pay`);
   } } }, state.demo ? '確認並前往付款' : '確認並保留訂單');
   quote();
   return h('div', { class: 'checkout' }, h('h1', {}, '贊助：' + p.title),
@@ -202,28 +224,92 @@ route('/p/:slug/checkout', async ({ slug }, q) => {
         h('section', { class: 'card' }, h('h3', {}, '2. 收件資料'), field('寄送地區', region), deliveryBox, h('div', { class: 'grid3' }, field('收件人姓名', R.name), field('電話', R.phone), field('Email', R.email))),
         h('section', { class: 'card' }, h('h3', {}, '3. 回饋調查與備註'), surveyBox, main.hasNote ? field('備註' + (main.noteRequired ? '（必填）' : ''), note) : null),
         h('section', { class: 'card' }, h('h3', {}, '4. 付款方式'), payBox, instBox, h('p', { class: 'small muted' }, state.demo ? 'ATM 轉帳：訂單成立隔天 23:59:59 前付款。' : '線上付款尚未開放：送出後訂單會先保留，不會扣款；開放後會通知你。')),
-        invBox,
+        state.demo ? invBox : receiptBox, consentBox,
         p.ageLimit === 18 ? field('我已年滿 18 歲', age) : null),
-      h('aside', { class: 'card sticky' }, h('h3', {}, '金額'), sumBox, err, submit, h('p', { class: 'small muted' }, '按下確認代表你同意本計畫的退換貨規則與平台使用條款。'))));
+      h('aside', { class: 'card sticky' }, h('h3', {}, '金額'), sumBox, err, submit, h('p', { class: 'small muted' }, state.me ? '按下確認代表你同意本計畫的退換貨規則與使用條款。' : '不用先註冊，填好資料就能送出。按下確認代表你同意本計畫的退換貨規則與使用條款。'))));
 });
 
-// ---------- 付款 ----------
-// 正式模式還沒串真的金流：只顯示「尚未開放」，不讓人以為付成功（KIRK 選的做法）；測試模式（DEMO=1）才有測試用的付款按鈕
+// ---------- 付款（測試金流頁：長得像第三方金流的付款頁，但不會扣款）----------
+const saved = (token) => { try { return JSON.parse(sessionStorage.getItem('done:' + token) || 'null'); } catch { return null; } };
+async function loadOrder(token) {
+  const s = saved(token);
+  if (state.me) { const list = await api('/api/my/orders'); const o = list.find((x) => x.token === token); if (o) return o; }
+  if (s && s.email) return api(`/api/orders/${token}/view`, { email: s.email });
+  throw new Error('找不到這張訂單：請用「訂單查詢」輸入 Email 和訂單編號');
+}
 route('/orders/:token/pay', async ({ token }) => {
-  const list = await api('/api/my/orders'); const o = list.find((x) => x.token === token); if (!o) throw new Error('找不到這張訂單');
-  if (o.status !== 'pending') return orderDone(o);
-  if (!state.demo) return h('div', { class: 'card closed narrow' }, h('h2', {}, '線上付款尚未開放'), h('p', { class: 'muted' }, `訂單 ${o.token} 已保留`), h('div', { class: 'big-num' }, money(o.total)),
-    h('p', {}, '目前還不會扣款。線上付款開放後，我們會通知你回來完成付款。'), h('div', { class: 'row', style: { justifyContent: 'center' } }, o.project ? link('/p/' + o.project.slug, '回計畫頁', 'btn ghost') : null, link('/me/orders', '查看贊助紀錄', 'btn')));
-  if (o.payMethod === 'atm') return h('div', { class: 'card center' }, h('h2', {}, 'ATM 虛擬帳號（測試）'), h('p', {}, '請在期限內轉帳：'), h('div', { class: 'big-num' }, money(o.total)), h('p', {}, '銀行代碼 999'), h('p', { class: 'mono big' }, o.atmAccount), h('p', {}, '繳費期限：' + dt(o.atmDeadline)),
-    h('button', { class: 'btn', on: { click: async () => { if (await act(() => api(`/api/orders/${token}/atm-paid`, {}), '已收到轉帳')) go(`/orders/${token}/pay`, true); } } }, '我已轉帳（測試）'), ' ', link('/me/orders', '稍後再付', 'btn ghost'));
-  const last4 = inp('', { maxlength: 4, inputmode: 'numeric', placeholder: '例如 4242' });
-  return h('div', { class: 'card center narrow' }, h('h2', {}, o.payMethod === 'aftee' ? 'AFTEE 先享後付（測試）' : '信用卡付款（測試）'), h('div', { class: 'big-num' }, money(o.total)), o.installments ? h('p', {}, `分 ${o.installments} 期，每期約 ${money(Math.ceil(o.total / o.installments))}`) : null,
-    o.payMethod === 'credit' ? field('卡號末四碼（測試：0002 會被拒絕）', last4) : h('p', {}, '按下付款就算成功（測試）'),
-    h('button', { class: 'btn big', on: { click: async () => { if (await act(() => api(`/api/orders/${token}/pay`, { last4: last4.value }), '付款成功')) go(`/orders/${token}/pay`, true); } } }, '付款'));
+  const o = await loadOrder(token), s = saved(token) || {};
+  if (o.status !== 'pending') return go(`/orders/${token}/done`, true) || h('div');
+  const mode = state.payMode || (state.demo ? 'demo' : 'closed');
+  if (mode === 'closed') return h('div', { class: 'card closed narrow' }, h('h2', {}, '線上付款尚未開放'), h('p', { class: 'muted' }, `訂單 ${o.token} 已保留`), h('div', { class: 'big-num' }, money(o.total)),
+    h('p', {}, '目前還不會扣款。線上付款開放後，我們會通知你回來完成付款。'), h('div', { class: 'row', style: { justifyContent: 'center' } }, link(`/orders/${token}/done`, '查看訂單', 'btn')));
+  const body = (extra = {}) => ({ email: s.email || '', ...extra });
+  const paid = () => go(`/orders/${token}/done`, true);
+  // 付款頁的版型照一般第三方金流：上面商店與金額，左邊付款方式，右邊訂單明細
+  const head = h('div', { class: 'gw-head' }, h('div', {}, h('b', {}, '人生地圖募資'), h('span', { class: 'muted small' }, '　安全付款')), h('span', { class: 'gw-lock' }, '🔒 SSL 加密連線'));
+  const test = h('div', { class: 'gw-test' }, '測試金流：所有付款都不會真的扣款，請勿輸入真實卡號');
+  const summary = h('aside', { class: 'gw-sum' }, h('div', { class: 'small muted' }, '訂單編號'), h('div', { class: 'mono' }, o.token), h('div', { class: 'small muted' }, '專案'), h('div', {}, o.project ? o.project.title : ''),
+    h('ul', { class: 'small' }, o.items.map((it) => h('li', {}, `${it.name} × ${it.qty}`)), o.bonus ? h('li', {}, '加碼 ' + money(o.bonus)) : null), h('div', { class: 'gw-total' }, h('span', {}, '應付金額'), h('b', {}, money(o.total))));
+  let main;
+  if (o.payMethod === 'atm') {
+    main = h('div', {}, h('h3', {}, 'ATM 虛擬帳號'), h('table', { class: 'gw-tbl' }, h('tr', {}, h('th', {}, '銀行代碼'), h('td', {}, '999（測試銀行）')), h('tr', {}, h('th', {}, '虛擬帳號'), h('td', { class: 'mono big' }, o.atmAccount)), h('tr', {}, h('th', {}, '繳費金額'), h('td', {}, money(o.total))), h('tr', {}, h('th', {}, '繳費期限'), h('td', {}, dt(o.atmDeadline)))),
+      h('p', { class: 'small muted' }, '轉帳完成後，系統約 10 分鐘內入帳。測試金流可以直接按下面的按鈕模擬銀行入帳。'),
+      h('button', { class: 'btn big full', on: { click: async () => { if (await act(() => api(`/api/orders/${token}/atm-paid`, body()), '已收到轉帳')) paid(); } } }, '模擬轉帳完成'));
+  } else {
+    // 卡號只在畫面上排版；送到伺服器的只有末四碼（完整卡號絕不離開這台裝置）
+    const card = inp('', { inputmode: 'numeric', autocomplete: 'off', placeholder: '4242 4242 4242 4242', maxlength: 19, on: { input: () => { const d = card.value.replace(/\D/g, '').slice(0, 16); card.value = d.replace(/(\d{4})(?=\d)/g, '$1 '); } } });
+    const exp = inp('', { inputmode: 'numeric', autocomplete: 'off', placeholder: 'MM / YY', maxlength: 7, on: { input: () => { const d = exp.value.replace(/\D/g, '').slice(0, 4); exp.value = d.length > 2 ? d.slice(0, 2) + ' / ' + d.slice(2) : d; } } });
+    const cvc = inp('', { inputmode: 'numeric', autocomplete: 'off', placeholder: '3 碼', maxlength: 3, type: 'password' });
+    const btn = h('button', { class: 'btn big full', on: { click: async () => {
+      const d = card.value.replace(/\D/g, '');
+      if (o.payMethod === 'credit' && (d.length !== 16 || !/^\d{2} \/ \d{2}$/.test(exp.value) || !/^\d{3}$/.test(cvc.value))) return toast('請填完整的卡號、有效期限、安全碼（測試金流可用 4242 4242 4242 4242）', 'err');
+      btn.disabled = true; btn.textContent = '處理中…';
+      const ok = await act(() => api(`/api/orders/${token}/pay`, body({ last4: d.slice(-4) })), '付款成功');
+      card.value = ''; cvc.value = '';
+      if (ok) paid(); else { btn.disabled = false; btn.textContent = `確認付款 ${money(o.total)}`; }
+    } } }, `確認付款 ${money(o.total)}`);
+    main = o.payMethod === 'credit' ? h('div', {}, h('h3', {}, '信用卡付款'), o.installments ? h('p', { class: 'small' }, `分 ${o.installments} 期，每期約 ${money(Math.ceil(o.total / o.installments))}`) : null,
+      field('信用卡卡號', card), h('div', { class: 'grid2' }, field('有效期限', exp), field('背面末三碼', cvc)), h('p', { class: 'small muted' }, '測試卡號：4242 4242 4242 4242（成功）、4000 0000 0000 0002（模擬銀行拒絕）'), btn)
+      : h('div', {}, h('h3', {}, 'AFTEE 先享後付'), h('p', { class: 'small muted' }, '測試金流：按下去就算付款完成。'), btn);
+  }
+  return h('div', { class: 'gw' }, test, h('div', { class: 'gw-box' }, head, h('div', { class: 'gw-body' }, h('div', { class: 'gw-main' }, main), summary)), h('p', { class: 'tc small muted' }, link('/me/orders', '稍後再付款')));
 });
 function orderDone(o) {
   return h('div', { class: 'card center' }, h('h2', {}, o.status === 'paid' ? '🎉 贊助成功' : o.statusName), h('p', {}, `訂單編號 ${o.token}`), h('div', { class: 'big-num' }, money(o.total)), o.project ? link('/p/' + o.project.slug, '回計畫頁', 'btn ghost') : null, ' ', link('/me/orders', '查看贊助紀錄', 'btn'));
 }
+
+/** 結帳時發現這個 Email 已經是會員：彈窗登入，登入成功就幫他重新送出（填好的資料都還在） */
+function loginBox(email, then) {
+  const em = inp(email, { type: 'email', autocomplete: 'username' }), pw = inp('', { type: 'password', autocomplete: 'current-password' });
+  modal('這個 Email 已經是會員', h('div', {}, h('p', { class: 'muted' }, '請登入後送出，填好的資料都會保留。'), field('Email', em), field('密碼', pw)),
+    [{ text: '登入並送出', fn: async () => { const ok = await act(() => api('/api/login', { email: em.value, password: pw.value }), '登入成功'); if (!ok) return false; await loadMe(); then(); return true; } }]);
+}
+// ---------- 訪客下單完成：顯示訂單；有勾建立會員就請他設定密碼 ----------
+route('/orders/:token/done', async ({ token }) => {
+  const s = saved(token);
+  let o = null; try { o = await loadOrder(token); } catch { o = null; }
+  if (!o) return go('/lookup', true) || h('div');
+  o = { ...o, setPassword: s && s.setPassword, email: (s && s.email) || (state.me && state.me.email) || '' };
+  const pw = inp('', { type: 'password', autocomplete: 'new-password' }), pw2 = inp('', { type: 'password', autocomplete: 'new-password' });
+  const setBox = o.setPassword ? h('section', { class: 'card' }, h('h3', {}, '最後一步：設定密碼'), h('p', { class: 'small muted' }, `你的會員帳號是 ${o.email}，已經幫你登入。設定密碼後，下次就能直接登入看贊助紀錄（24 小時內有效）。`),
+    field('密碼（8～64 字，要有英文和數字）', pw), field('再輸入一次', pw2),
+    h('button', { class: 'btn', on: { click: async () => { if (pw.value !== pw2.value) return toast('兩次密碼不一樣', 'err'); if (await act(() => api('/api/password/set', { token: o.setPassword, password: pw.value }), '密碼已設定')) { sessionStorage.removeItem('done:' + token); await loadMe(); go('/me/orders'); } } } }, '設定密碼')) : null;
+  const paidOk = o.status === 'paid';
+  return h('div', { class: 'narrow' }, h('div', { class: 'card closed' }, h('h2', {}, paidOk ? '🎉 護持成功，謝謝你' : o.status === 'pending' ? '訂單已保留' : o.statusName), h('p', { class: 'muted' }, `訂單編號 ${o.token}`), h('div', { class: 'big-num' }, money(o.total)),
+    paidOk ? h('p', {}, '廟方會依你填的資料進行祈福登錄，回饋寄出時會再通知你。') : o.status === 'pending' ? h('p', {}, (state.payMode === 'closed' ? '線上付款尚未開放，目前不會扣款；開放後會通知你。' : '還沒完成付款。'), state.payMode !== 'closed' ? link(`/orders/${o.token}/pay`, '前往付款') : null) : null,
+    h('p', { class: 'small muted' }, '請記下訂單編號，之後用「Email＋訂單編號」就能在「訂單查詢」看進度。')), setBox,
+    h('div', { class: 'row', style: { justifyContent: 'center' } }, o.project ? link('/p/' + o.project.slug, '回專案頁', 'btn ghost') : null, link('/lookup', '訂單查詢', 'btn ghost')));
+});
+route('/lookup', async () => {
+  const em = inp('', { type: 'email', autocomplete: 'email' }), tk = inp('', { placeholder: '例：A1B2C3D4E5', autocapitalize: 'characters' });
+  const out = h('div');
+  const show = (o) => out.replaceChildren(h('article', { class: 'card order' }, h('div', { class: 'row between' }, h('b', {}, o.project ? o.project.title : ''), badge(o.statusName, o.status)), h('div', { class: 'muted small' }, `訂單 ${o.token}・${dt(o.createdAt)}`),
+    h('ul', { class: 'small' }, o.items.map((it) => h('li', {}, `${it.name} × ${it.qty}　${money(it.price * it.qty)}`)), o.bonus ? h('li', {}, '加碼 ' + money(o.bonus)) : null), h('b', {}, '總金額 ' + money(o.total)),
+    o.shipped ? h('p', { class: 'ok' }, `已寄出：${o.shipped.carrier} ${o.shipped.trackNo}`) : null));
+  return h('div', { class: 'card auth' }, h('h1', {}, '訂單查詢'), h('p', { class: 'muted small' }, '不用登入：輸入下單時填的 Email 和訂單編號。'), field('Email', em), field('訂單編號', tk),
+    h('button', { class: 'btn full', on: { click: async () => { const o = await act(() => api('/api/lookup', { email: em.value, token: tk.value }), ''); if (o) show(o); } } }, '查詢'), out,
+    h('p', { class: 'small muted' }, '是會員嗎？', link('/login?next=/me/orders', '登入看全部贊助紀錄')));
+});
 
 // ---------- 我的贊助紀錄 ----------
 route('/me/orders', async () => {
@@ -233,7 +319,7 @@ route('/me/orders', async () => {
     h('ul', { class: 'small' }, o.items.map((it) => h('li', {}, `${it.name} × ${it.qty}　${money(it.price * it.qty)}`)), o.bonus ? h('li', {}, '加碼 ' + money(o.bonus)) : null, o.discount ? h('li', {}, `折扣碼 ${o.coupon} −${money(o.discount)}`) : null, h('li', {}, '運費 ' + money(o.shippingFee))),
     h('div', { class: 'row between' }, h('b', {}, '總金額 ' + money(o.total)), h('span', { class: 'muted small' }, state.meta.payMethods[o.payMethod] + (o.installments ? ` 分 ${o.installments} 期` : ''))),
     o.status === 'pending' && o.payMethod === 'atm' ? h('p', { class: 'warn' }, `請在 ${dt(o.atmDeadline)} 前轉帳到 ${o.atmAccount}`) : null,
-    o.status === 'pending' ? (state.demo ? link(`/orders/${o.token}/pay`, '前往付款', 'btn') : h('p', { class: 'warn' }, '線上付款尚未開放，訂單已保留，開放後會通知你。')) : null,
+    o.status === 'pending' ? (state.payMode !== 'closed' ? link(`/orders/${o.token}/pay`, '前往付款', 'btn') : h('p', { class: 'warn' }, '線上付款尚未開放，訂單已保留，開放後會通知你。')) : null,
     o.shipped ? h('p', { class: 'ok' }, `已出貨：${o.shipped.carrier} ${o.shipped.trackNo}（${dt(o.shipped.at)}）`) : null,
     o.status === 'refunded' && o.refundFee ? h('p', { class: 'small muted' }, `退款已扣轉帳手續費 ${money(o.refundFee)}`) : null,
     o.refund ? h('p', { class: 'small' }, `退款申請：${o.refund.statusName}${o.refund.note ? '（' + o.refund.note + '）' : ''}`) : null,
@@ -279,7 +365,9 @@ route('/me/settings', async () => {
     h('section', { class: 'card' }, field('顯示圖片', F.avatar), field('名稱', F.name), field('真實身分／名稱', F.realName), field('電子信箱', inp(s.email, { disabled: true })), field('允許訊息通知 - 如：計畫更新、站內訊息', F.notify), field('訂閱電子報', F.newsletter),
       field('性別', F.gender), field('生日', F.birthday), field('來自', F.from), field('網址名稱', F.slug, '個人頁網址 /u/這個名字'), field('Facebook 網址', F.fb), field('Instagram 網址', F.ig), field('YouTube 網址', F.yt), field('網站網址', F.web), field('個人介紹', F.bio),
       h('button', { class: 'btn', on: { click: async () => { const b = Object.fromEntries(Object.entries(F).map(([k, e]) => [k, e.getValue ? e.getValue() : e.type === 'checkbox' ? e.checked : e.value])); if (await act(() => api('/api/settings', b))) loadMe(); } } }, '儲存')),
-    h('section', { class: 'card' }, h('h3', {}, '修改密碼'), field('舊密碼', pwOld), field('新密碼（8～64 字，要有英文和數字）', pwNew), h('button', { class: 'btn ghost', on: { click: () => act(() => api('/api/settings/password', { old: pwOld.value, password: pwNew.value }), '密碼已更新，其他裝置已登出') } }, '更新密碼')));
+    h('section', { class: 'card' }, h('h3', {}, '修改密碼'), field('舊密碼', pwOld), field('新密碼（8～64 字，要有英文和數字）', pwNew), h('button', { class: 'btn ghost', on: { click: () => act(() => api('/api/settings/password', { old: pwOld.value, password: pwNew.value }), '密碼已更新，其他裝置已登出') } }, '更新密碼')),
+    h('section', { class: 'card' }, h('h3', {}, '刪除帳號'), h('p', { class: 'small muted' }, '刪除後會清掉你的個人資料、收件資料，所有裝置登出；訂單金額等交易紀錄依法保留。還有待付款或訂閱中的訂單要先取消。'),
+      h('button', { class: 'btn danger', on: { click: () => { const pw = inp('', { type: 'password' }), cf = inp('', { placeholder: '刪除帳號' }); modal('刪除帳號', h('div', {}, field('密碼', pw), field('請輸入「刪除帳號」確認', cf)), [{ text: '刪除', cls: 'danger', fn: async () => { const ok = await act(() => api('/api/settings/delete', { password: pw.value, confirm: cf.value }), '帳號已刪除'); if (ok) { await loadMe(); go('/'); } return !!ok; } }]); } } }, '刪除我的帳號')));
 });
 
 // ---------- 團隊設定 ----------
@@ -321,7 +409,7 @@ route('/login', async (_, q) => {
   const em = inp('', { type: 'email', autocomplete: 'username' }), pw = inp('', { type: 'password', autocomplete: 'current-password' });
   const next = q.next && q.next.startsWith('/') && !q.next.startsWith('//') ? q.next : '/';
   const submit = async (e) => { e.preventDefault(); if (await act(() => api('/api/login', { email: em.value, password: pw.value }), '登入成功')) { await loadMe(); go(next); } };
-  return h('form', { class: 'card auth', on: { submit } }, h('h1', {}, '登入'), field('Email', em), field('密碼', pw), h('button', { class: 'btn full' }, '登入'), h('p', {}, '還沒有帳號？', link('/register?next=' + encodeURIComponent(next), '註冊')),
+  return h('form', { class: 'card auth', on: { submit } }, h('h1', {}, '登入'), field('Email', em), field('密碼', pw), h('button', { class: 'btn full' }, '登入'), h('p', {}, '還沒有帳號？', link('/register?next=' + encodeURIComponent(next), '註冊')), h('p', { class: 'small muted' }, '沒有註冊也下過單？', link('/lookup', '用 Email＋訂單編號查詢')),
     state.demo ? h('div', { class: 'demo' }, h('b', {}, '測試帳號（密碼都是 Demo1234）'), h('ul', {}, [['admin@demo.local', '平台管理員'], ['pm@demo.local', '專案經理'], ['creator@demo.local', '提案人'], ['backer1@demo.local', '贊助人']].map(([e, n]) => h('li', {}, h('button', { type: 'button', class: 'linkbtn', on: { click: () => { em.value = e; pw.value = 'Demo1234'; } } }, e), '　' + n)))) : null);
 });
 route('/register', async (_, q) => {

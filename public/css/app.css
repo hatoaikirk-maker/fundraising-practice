@@ -295,3 +295,18 @@ input.sm { min-height: 36px; padding: 4px 8px; width: 110px; } input.qty { width
   .top-nav.open a { padding: 12px 0; border-bottom: 1px solid var(--line); }
   .top-in .user, .top-auth { margin-left: auto; }
 }
+
+/* ---------- 測試金流付款頁（版型照一般第三方金流）---------- */
+.gw { max-width: 880px; margin: 32px auto; }
+.gw-test { background: #fff4dc; color: #8a5a00; border: 1px solid #f3dfa8; border-radius: 8px; padding: 8px 14px; font-size: .86rem; text-align: center; margin-bottom: 14px; }
+.gw-box { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); background: #fff; }
+.gw-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 22px; background: #fafafa; border-bottom: 1px solid var(--line); }
+.gw-lock { font-size: .82rem; color: var(--ok); }
+.gw-body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
+.gw-main { padding: 22px; } .gw-main h3 { margin-top: 0; }
+.gw-sum { background: var(--soft); padding: 22px; display: flex; flex-direction: column; gap: 4px; border-left: 1px solid var(--line); }
+.gw-sum ul { padding-left: 1.1em; margin: 8px 0; }
+.gw-total { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; display: flex; justify-content: space-between; align-items: baseline; } .gw-total b { font-size: 1.5rem; color: var(--ac); }
+.gw-tbl { width: 100%; border-collapse: collapse; margin: 8px 0 12px; } .gw-tbl th, .gw-tbl td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); } .gw-tbl th { color: var(--mute); font-weight: 400; width: 96px; }
+.consent .field.check { align-items: flex-start; } .consent .field.check span { font-weight: 400; font-size: .92rem; }
+@media (max-width: 760px) { .gw-body { grid-template-columns: 1fr; } .gw-sum { border-left: 0; border-top: 1px solid var(--line); } }

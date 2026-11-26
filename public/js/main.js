@@ -14,7 +14,7 @@ function header() {
   const menu = h('div', { class: 'menu hidden' });
   if (me) menu.append(
     link('/u/' + me.slug, '個人頁面'), link('/me/orders', '贊助紀錄'), link('/me/following', '追蹤計畫'), link('/me/mail', '通知信箱'), link('/me/settings', '帳號設定'), me.role !== 'member' ? link('/me/projects', '我管理的專案') : null,
-    me.role !== 'member' ? link('/admin', me.role === 'admin' ? '平台管理後台（管理員）' : '平台管理後台（一般人員）', 'strong') : null,
+    me.role !== 'member' ? link('/admin', me.role === 'admin' ? '募資上架後台（管理員）' : '募資上架後台（一般人員）', 'strong') : null,
     h('button', { class: 'linkbtn', on: { click: async () => { if (await act(() => api('/api/logout', {}), '已登出')) { await loadMe(); go('/'); } } } }, '登出'));
   const user = me ? h('button', { class: 'avatar-btn', 'aria-label': '個人選單', on: { click: (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); } } }, me.avatar ? h('img', { src: me.avatar, alt: '' }) : me.name.slice(0, 1)) : h('span', { class: 'top-auth' }, link('/login?next=' + encodeURIComponent(location.pathname), '登入', 'btn sm ghost'), link('/register', '註冊', 'btn sm'));
   document.addEventListener('click', () => menu.classList.add('hidden'));
@@ -26,6 +26,7 @@ function header() {
     link('/', logo(), null),
     burger, nav,
     h('form', { class: 'top-search', on: { submit: (e) => { e.preventDefault(); go('/explore?q=' + encodeURIComponent(q.value)); } } }, q),
+    me && me.role !== 'member' ? link('/admin', '上架後台', 'btn sm dark') : null,
     me ? link('/me/inbox', state.unread ? `訊息 (${state.unread})` : '訊息', 'top-msg') : null,
     h('div', { class: 'user' }, user, menu)));
 }
@@ -41,8 +42,8 @@ function footer() {
   return h('footer', { class: 'foot' },
     h('div', { class: 'foot-in' },
       h('div', {}, logo(), h('span', {}, '陪在地廟宇把香火與文化，帶給更多人。每一份護持，都會回到廟裡。')),
-      h('div', {}, h('b', {}, '關於我們'), link('/#story', '人生地圖初心'), link('/help/privacy', '隱私及條款'), link('/inquiry', '宮廟合作申請'), link('/help/antifraud', '反詐騙宣導')),
-      h('div', {}, h('b', {}, '幫助'), link('/explore', '護持專案'), link('/help/faq', '常見問答'), link('/help/payment', '付款說明'), link('/help/terms', '使用條款'))),
+      h('div', {}, h('b', {}, '關於我們'), link('/#story', '人生地圖初心'), link('/help/privacy', '隱私及條款'), link('/inquiry', '宮廟合作申請'), link('/help/antifraud', '反詐騙宣導'), link('/admin', '後台登入')),
+      h('div', {}, h('b', {}, '幫助'), link('/lookup', '訂單查詢'), link('/explore', '護持專案'), link('/help/faq', '常見問答'), link('/help/payment', '付款說明'), link('/help/terms', '使用條款'))),
     h('div', { class: 'foot-copy' }, `© ${new Date().getFullYear()} 麥睿資訊股份有限公司・人生地圖募資`));
 }
 function frame() {

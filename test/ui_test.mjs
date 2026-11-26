@@ -69,6 +69,11 @@ try {
   await visit('/me/orders', '請先登入');
   await visit('/login', '測試帳號');
   // ---------- 贊助人：結帳 ----------
+  // 免註冊結帳：沒登入直接進結帳頁，有隱私權、建立會員、活動消息三個勾選框（後兩個預設不勾）
+  await visit(`/p/demo-light-wall/checkout?option=${(await core.api('/api/p/demo-light-wall')).options[0].id}`, '6. 確認');
+  { const cbs = [...W.document.querySelectorAll('.consent input[type=checkbox]')]; ok(cbs.length === 3 && cbs.every((c) => !c.checked), '訪客結帳：三個同意勾選框、預設都不勾'); }
+  await visit('/lookup', '訂單查詢');
+  await visit('/admin', '募資上架後台'); ok(!!W.document.querySelector('form.auth input[type=password]'), '沒登入進 /admin：直接顯示後台登入');
   await login('backer3@demo.local');
   const p = await core.api('/api/p/demo-light-wall');
   await visit(`/p/demo-light-wall/checkout?option=${p.options[0].id}`, '1. 護持方案');
@@ -83,9 +88,10 @@ try {
   setVal(`${p.options[0].name}｜祈福姓名`, '陳志豪'); setVal(`${p.options[0].name}｜鐘別`, '光明');
   const payRadio = [...W.document.querySelectorAll('input[name=pay]')][0]; payRadio.checked = true; payRadio.dispatchEvent(new W.Event('change', { bubbles: true }));
   click('button', '確認並前往付款');
-  ok(await until(() => text().includes('信用卡付款')), '下單後：到付款頁');
-  setVal('卡號末四碼', '4242'); click('button.big', '付款');
-  ok(await until(() => text().includes('贊助成功')), '付款後：贊助成功');
+  ok(await until(() => text().includes('信用卡付款') && text().includes('測試金流')), '下單後：到測試金流付款頁（標示不會扣款）');
+  setVal('信用卡卡號', '4242424242424242'); setVal('有效期限', '1230'); setVal('背面末三碼', '123'); click('button.big', '確認付款');
+  ok(await until(() => text().includes('護持成功')), '付款後：護持成功');
+  ok(!W.document.body.textContent.includes('4242 4242 4242 4242 ') && [...W.document.querySelectorAll('input')].every((i) => !/^\d{4} \d{4} \d{4} \d{4}$/.test(i.value)), '付款後：畫面上沒有留著卡號');
   await visit('/me/orders', '付款成功');
   ok(W.document.querySelectorAll('.order').length >= 2, '贊助紀錄：列出訂單');
   await visit('/me/following', '追蹤計畫');

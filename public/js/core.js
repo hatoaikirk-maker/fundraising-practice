@@ -46,7 +46,7 @@ export async function api(path, body, { method } = {}) {
 }
 export async function loadMe() {
   const j = await api('/api/me');
-  state.me = j.user; state.csrf = j.csrf; state.meta = j.meta; state.offset = j.now - Date.now(); state.unread = j.unread; state.notices = j.notices; state.demo = j.demo;
+  state.me = j.user; state.csrf = j.csrf; state.meta = j.meta; state.offset = j.now - Date.now(); state.unread = j.unread; state.notices = j.notices; state.demo = j.demo; state.payMode = j.payMode;
   return j;
 }
 /** 上傳檔案（圖片、GIF、影片；kind=contract 可傳 PDF）→ { url, type } */
