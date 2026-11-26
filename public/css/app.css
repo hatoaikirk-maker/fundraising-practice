@@ -317,3 +317,13 @@ input.sm { min-height: 36px; padding: 4px 8px; width: 110px; } input.qty { width
 .ai-msg .rich { font-size: .94rem; } .ai-msg p { margin: .3em 0; }
 .ai-input { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .side-a.back { color: var(--ac); font-weight: 700; border-bottom: 1px solid var(--line); border-radius: 0; margin-bottom: 4px; }
+/* ---------- 後台：計畫管理（每個計畫一張卡，按鈕排在下面一行）---------- */
+.plist { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }
+.pitem { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: #fff; }
+.pitem-top { display: flex; gap: 16px; align-items: flex-start; }
+.pitem-img { width: 160px; aspect-ratio: 16/9; object-fit: cover; border-radius: 8px; flex: none; }
+.pitem-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.pitem-title { font-weight: 800; font-size: 1.05rem; color: var(--ink); }
+.pitem-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .88rem; color: var(--mute); } .pitem-meta b { color: var(--ink); }
+.pitem-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+@media (max-width: 600px) { .pitem-top { flex-direction: column; } .pitem-img { width: 100%; } }

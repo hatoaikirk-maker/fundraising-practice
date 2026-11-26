@@ -41,6 +41,9 @@ export async function api(path, body, { method } = {}) {
   let r = await fetch(path, opt);
   if (r.status === 403 && m !== 'GET') { await loadMe(); opt.headers['X-CSRF'] = state.csrf; r = await fetch(path, opt); }   // CSRF 換過（例如登入）：重拿一次再試
   let j = null; try { j = await r.json(); } catch { j = null; }
+  // 401＝伺服器不認得這個登入了（例如主機重開、登入過期）：畫面上還以為登入著會很亂（KIRK：「我都登入了，為什麼還要請先登入」）
+  // → 更新登入狀態、重畫目前這一頁（後台會直接出現登入框），並說清楚原因
+  if (r.status === 401 && state.me) { state.me = null; loadMe().then(() => render()); const e = new Error('登入已過期（主機剛重新啟動），請再登入一次'); e.status = 401; throw e; }
   if (!r.ok) { const e = new Error((j && j.error) || '連線失敗，請稍後再試'); e.status = r.status; throw e; }
   return j;
 }

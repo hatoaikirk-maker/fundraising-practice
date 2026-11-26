@@ -64,10 +64,23 @@ route('/admin/projects', async (_, q) => shell('projects', async () => {
   const mgr = (p) => { const s = sel(Object.fromEntries(staff.map((u) => [u.id, u.name])), String(p.managerId || '')); modal('指派專案經理', field('專案經理', s), [{ text: '指派', fn: async () => { const ok = await act(() => api(`/api/admin/projects/${p.id}`, { action: 'manager', managerId: Number(s.value) })); if (ok) reload(); return !!ok; } }]); };
   const create = async () => { const type = sel(state.meta.types, 'crowd'), title = inp(''); modal('新增計畫', h('div', {}, field('類型', type), field('計畫名稱', title), h('p', { class: 'small muted' }, '建好後進後台寫內容、方案，再回這裡按「上架」。')), [{ text: '建立', fn: async () => { const r = await act(() => api('/api/start', { type: type.value, title: title.value }), '已建立草稿'); if (r) go(`/c/${r.id}/edit`); return !!r; } }]); };
   return h('div', {}, h('div', { class: 'row between' }, h('h1', {}, '計畫管理'), h('button', { class: 'btn', on: { click: create } }, '＋ 新增計畫')), h('form', { class: 'filters', on: { submit: (e) => { e.preventDefault(); const n = new URLSearchParams(); if (kw.value) n.set('q', kw.value); if (st.value) n.set('status', st.value); go('/admin/projects?' + n.toString()); } } }, kw, st, h('button', { class: 'btn' }, '搜尋')),
-    table(['計畫', '執行人', '負責人員', '狀態', '集資', '時間', '首頁', '操作'], list.map((p) => [link('/p/' + p.slug, p.title), p.executor || p.owner, p.manager || '—', badge(p.statusName, p.status), `${money(p.raised)}（${p.percent}%）`, `${dt(p.startAt, false)}～${dt(p.endAt, false)}`, [p.featured ? badge('主打') : '', p.staffPick ? badge('精選', 'gold') : ''],
-      h('div', { class: 'row wrap' }, h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'feature') } }, p.featured ? '取消主打' : '首頁主打'), h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'pick') } }, p.staffPick ? '取消精選' : '編輯精選'), h('button', { class: 'btn sm ghost', on: { click: () => sched(p) } }, '調整時間'), h('button', { class: 'btn sm ghost', on: { click: () => mgr(p) } }, '指派負責人'), link(`/c/${p.id}`, '進後台', 'btn sm ghost'),
+    // KIRK：「右邊那一排按鈕放到案子下面，排成一行」→ 每個計畫一張卡：上面資料、下面一排按鈕
+    list.length ? h('div', { class: 'plist' }, list.map((p) => h('article', { class: 'pitem' },
+      h('div', { class: 'pitem-top' },
+        p.cover ? h('img', { src: p.cover, alt: '', class: 'pitem-img' }) : null,
+        h('div', { class: 'pitem-info' },
+          h('div', { class: 'row' }, link('/p/' + p.slug, p.title, 'pitem-title'), badge(p.statusName, p.status), p.featured ? badge('主打') : null, p.staffPick ? badge('精選', 'gold') : null),
+          h('div', { class: 'pitem-meta' }, h('span', {}, '執行人 ', h('b', {}, p.executor || p.owner)), h('span', {}, '負責 ', h('b', {}, p.manager || '—')), h('span', {}, '集資 ', h('b', {}, money(p.raised)), `（${p.percent}%）`), h('span', {}, `${dt(p.startAt, false)}～${p.endAt ? dt(p.endAt, false) : '長期'}`)))),
+      h('div', { class: 'pitem-actions' },
+        link(`/c/${p.id}`, '編輯內容', 'btn sm'),
         ['draft', 'reviewing'].includes(p.status) ? h('button', { class: 'btn sm', on: { click: () => doA(p, 'publish') } }, '上架') : null,
-        p.status === 'suspended' ? h('button', { class: 'btn sm', on: { click: () => doA(p, 'restore') } }, '恢復上架') : h('button', { class: 'btn sm danger', on: { click: () => doA(p, 'suspend') } }, '下架'), state.me.role === 'admin' && p.steps && p.steps.plan === 'ok' ? h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'unlock') } }, '解鎖時間') : null)])));
+        h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'feature') } }, p.featured ? '取消主打' : '首頁主打'),
+        h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'pick') } }, p.staffPick ? '取消精選' : '設為精選'),
+        h('button', { class: 'btn sm ghost', on: { click: () => sched(p) } }, '調整時間'),
+        h('button', { class: 'btn sm ghost', on: { click: () => mgr(p) } }, '指派負責人'),
+        link('/p/' + p.slug, '看前台', 'btn sm ghost'),
+        p.status === 'suspended' ? h('button', { class: 'btn sm', on: { click: () => doA(p, 'restore') } }, '恢復上架') : h('button', { class: 'btn sm danger', on: { click: () => doA(p, 'suspend') } }, '下架'),
+        state.demo && state.me.role === 'admin' && p.steps && p.steps.plan === 'ok' ? h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'unlock') } }, '解鎖時間') : null)))) : h('p', { class: 'muted' }, '找不到計畫'));
 }));
 
 // ---------- 訂單管理 ----------
