@@ -37,7 +37,7 @@ function projectRow(p) {
     link('/p/' + p.slug, p.cover ? media({ url: p.cover }, 'cover') : h('div', { class: 'cover ph' }, p.title.slice(0, 2)), 'prow-img'),
     h('div', { class: 'prow-txt' }, h('div', { class: 'pmeta' }, `${p.typeName}・執行：${p.executor || p.owner}`), link('/p/' + p.slug, p.title, 'prow-title'), h('p', { class: 'pdesc' }, p.description),
       sub ? h('div', { class: 'stage' }, h('b', {}, money(p.monthly)), h('span', {}, '本月護持・長期訂閱'))
-        : st ? [h('div', { class: 'stage' }, h('span', { class: 'stage-pct' }, st.percent + '%'), h('span', {}, `第${st.n}階段：${st.name}`), h('span', { class: 'muted' }, p.left)), h('div', { class: 'progress' }, h('i', { style: { width: Math.min(100, st.percent) + '%' } }))] : null,
+        : st ? [h('div', { class: 'stage' }, h('span', { class: 'stage-pct' }, st.percent + '%'), h('span', {}, st.total > 1 ? `第${st.n}階段：${st.name}` : '達成率'), h('span', { class: 'muted' }, p.left)), h('div', { class: 'progress' }, h('i', { style: { width: Math.min(100, st.percent) + '%' } }))] : null,
       link('/p/' + p.slug, '馬上護持 ›', 'btn')));
 }
 
@@ -67,7 +67,7 @@ route('/p/:slug', async ({ slug }, q) => {
   const shareFb = h('a', { href: 'https://www.facebook.com/sharer/sharer.php?u=' + pageUrl, target: '_blank', rel: 'noopener noreferrer', class: 'btn ghost' }, 'Facebook');
   const shareLine = h('a', { href: 'https://social-plugins.line.me/lineit/share?url=' + pageUrl, target: '_blank', rel: 'noopener noreferrer', class: 'btn ghost' }, 'LINE');
   const contact = h('button', { class: 'linkbtn', on: { click: () => contactCreator(p, slug) } }, '聯繫我們');
-  const report = h('button', { class: 'linkbtn', on: { click: () => reportBox('project', p.id) } }, '檢舉計畫');
+  const report = state.demo ? h('button', { class: 'linkbtn', on: { click: () => reportBox('project', p.id) } }, '檢舉計畫') : null;
   let body;
   const follow = p.updates.filter((u) => u.category === '結案追蹤'), normal = p.updates.filter((u) => u.category !== '結案追蹤');
   const upList = (list, empty) => list.length ? list.map((u) => h('article', { class: 'card' }, h('div', { class: 'muted' }, `${u.category}｜${dt(u.at)}${u.private ? '｜贊助人限定' : ''}`), h('h3', {}, u.title), u.cover ? media({ url: u.cover }) : null, u.locked ? h('p', { class: 'lock' }, '🔒 這則更新只有特定回饋的贊助人看得到') : markup(u.content))) : h('p', { class: 'muted' }, empty);
@@ -90,7 +90,7 @@ route('/p/:slug', async ({ slug }, q) => {
       h('div', { class: 'p-media' }, p.cover ? media({ url: p.cover }, 'cover') : h('div', { class: 'cover ph big' }, p.title.slice(0, 4))),
       h('div', { class: 'p-info' },
         sub ? [h('div', { class: 'big-num' }, money(p.monthly), h('small', {}, ' / 本月')), h('div', { class: 'p-goal' }, '每月定期護持')]
-          : st ? [h('div', { class: 'stage-box' }, h('div', { class: 'small muted' }, `第${st.n}階段目標`), h('div', { class: 'stage-name' }, st.name), h('div', { class: 'stage-big' }, st.percent + '%'), h('div', { class: 'progress' }, h('i', { style: { width: Math.min(100, st.percent) + '%' } })), h('div', { class: 'small muted' }, `已護持 ${money(p.raised)}・本階段目標 ${money(st.goal)}`)),
+          : st ? [h('div', { class: 'stage-box' }, h('div', { class: 'small muted' }, st.total > 1 ? `第${st.n}階段目標` : '募資進度'), st.total > 1 ? h('div', { class: 'stage-name' }, st.name) : null, h('div', { class: 'stage-big' }, st.percent + '%'), h('div', { class: 'progress' }, h('i', { style: { width: Math.min(100, st.percent) + '%' } })), h('div', { class: 'small muted' }, `已護持 ${money(p.raised)}・${st.total > 1 ? '本階段' : ''}目標 ${money(st.goal)}`)),
             st.total > 1 ? h('ol', { class: 'stage-list' }, st.list.map((x) => h('li', { class: x.done ? 'done' : x.n === st.n ? 'now' : '' }, `第${x.n}階段：${x.name}`, h('span', {}, money(x.goal))))) : null] : null,
         h('div', { class: 'p-stats' }, h('span', {}, '贊助人數', h('b', {}, num(p.backers))), h('span', {}, sub ? '狀態' : '剩餘時間', h('b', {}, sub ? '長期訂閱' : p.status === 'live' ? p.left : p.statusName))),
         h('div', { class: 'p-period' }, sub ? `專案時間 ${dt(p.startAt, false)} 起・長期訂閱` : `專案時間 ${dt(p.startAt, false)} ~ ${dt(p.endAt, false)}`),
@@ -120,7 +120,7 @@ function optionCard(p, o, slug, code) {
 function comments(p, slug) {
   const top = p.comments.filter((c) => !c.parentId), kids = (id) => p.comments.filter((c) => c.parentId === id);
   const one = (c) => h('div', { class: 'cmt' }, h('div', { class: 'cmt-h' }, h('b', {}, c.name), c.isCreator ? badge('提案人', 'gold') : null, c.backer ? badge('贊助人') : null, h('span', { class: 'muted' }, ' ' + ago(c.at))), h('p', { class: 'pre' }, c.body),
-    h('div', { class: 'row small' }, state.me ? h('button', { class: 'linkbtn', on: { click: async () => { const t = await ask('回覆留言', '回覆內容', { multiline: true }); if (t && await act(() => api(`/api/p/${slug}/comments`, { body: t, parentId: c.id }), '已回覆')) go(`/p/${slug}?tab=comments`, true); } } }, '回覆') : null, state.me ? h('button', { class: 'linkbtn', on: { click: () => reportBox('comment', c.id) } }, '檢舉') : null),
+    h('div', { class: 'row small' }, state.me ? h('button', { class: 'linkbtn', on: { click: async () => { const t = await ask('回覆留言', '回覆內容', { multiline: true }); if (t && await act(() => api(`/api/p/${slug}/comments`, { body: t, parentId: c.id }), '已回覆')) go(`/p/${slug}?tab=comments`, true); } } }, '回覆') : null, state.me && state.demo ? h('button', { class: 'linkbtn', on: { click: () => reportBox('comment', c.id) } }, '檢舉') : null),
     h('div', { class: 'cmt-kids' }, kids(c.id).map(one)));
   const box = area('', 3, { placeholder: state.me ? '留言給提案人和大家…' : '登入後才能留言', disabled: !state.me });
   return h('div', {}, state.me ? h('form', { class: 'card', on: { submit: async (e) => { e.preventDefault(); if (await act(() => api(`/api/p/${slug}/comments`, { body: box.value }), '已留言')) go(`/p/${slug}?tab=comments`, true); } } }, box, h('button', { class: 'btn' }, '送出留言')) : link('/login?next=/p/' + slug, '登入後留言', 'btn ghost'), top.length ? top.map(one) : h('p', { class: 'muted' }, '還沒有留言'));

@@ -9,7 +9,9 @@
 import { h, link, go, api, state, loadMe, toast, act, modal, ask, money, num, dt, dtInput, ago, field, inp, area, sel, chk, table, badge, markup, route } from './core.js';
 
 // [網址, 名稱, 只有管理員看得到, 只有測試模式才有]
-const MENU = [['', '總覽'], ['projects', '計畫管理'], ['inquiries', '合作申請'], ['review', '審核流程'], ['orders', '訂單管理'], ['refunds', '退款處理'], ['reports', '檢舉處理'], ['comments', '留言管理'], ['notices', '首頁公告'],
+// 正式模式拿掉：審核流程、檢舉、首頁公告（KIRK 指示）；只留在測試模式（m[3]＝true）給自動測試用
+const MENU = [['', '總覽'], ['report', '總體報表'], ['ai', 'AI 助理', true], ['projects', '計畫管理'], ['inquiries', '合作申請'], ['orders', '訂單管理'], ['refunds', '退款處理'], ['comments', '留言管理'],
+  ['review', '審核流程', false, true], ['reports', '檢舉處理', false, true], ['notices', '首頁公告', false, true],
   ['users', '人員與會員', true], ['site', '首頁內容', true], ['payouts', '撥款結算', true], ['settings', '平台設定', true], ['emails', '寄信紀錄', true], ['audit', '操作紀錄', true], ['clock', '時鐘與重置（測試模式）', true, true]];
 const ROLE_NAMES = { member: '一般會員', staff: '一般人員', admin: '管理員' };
 async function shell(key, content) {
@@ -30,7 +32,7 @@ function adminLogin() {
 route('/admin', async () => shell('', async () => {
   const d = await api('/api/admin/overview');
   return h('div', {}, h('h1', {}, '總覽'), d.clockOffset ? h('p', { class: 'warn' }, `時鐘已快轉 ${Math.round(d.clockOffset / 3_600_000)} 小時：平台現在是 ${dt(d.now)}`) : null,
-    h('div', { class: 'kpis' }, [['今日集資', money(d.todayAmount)], ['今日訂單', num(d.todayOrders)], ['累計集資', money(d.totalAmount)], ['會員數', num(d.users)], ['待審核', num(d.reviewQueue)], ['待處理退款', num(d.refunds)], ['待處理檢舉', num(d.reports)], ['7 天內到期撥款', num(d.payoutsDue)]].map(([k, v]) => h('div', { class: 'kpi' }, h('span', {}, k), h('b', {}, v)))),
+    h('div', { class: 'kpis' }, [['今日集資', money(d.todayAmount)], ['今日訂單', num(d.todayOrders)], ['累計集資', money(d.totalAmount)], ['會員數', num(d.users)], ...(state.demo ? [['待審核', num(d.reviewQueue)]] : []), ['待處理退款', num(d.refunds)], ...(state.demo ? [['待處理檢舉', num(d.reports)]] : []), ['7 天內到期撥款', num(d.payoutsDue)]].map(([k, v]) => h('div', { class: 'kpi' }, h('span', {}, k), h('b', {}, v)))),
     h('h2', {}, '計畫狀態'), table(Object.values(state.meta.projectStatus), [Object.keys(state.meta.projectStatus).map((k) => num(d.projects[k]))]));
 }));
 
@@ -77,10 +79,10 @@ route('/admin/orders', async (_, q) => shell('orders', async () => {
     table(['狀態', '訂單', '計畫', '贊助人', '金額', '付款', '時間', '操作'], list.map((o) => [badge(o.statusName, o.status), o.token, o.project, o.backer, money(o.total), o.payName, dt(o.createdAt), h('div', { class: 'row' }, o.status === 'pending' ? [h('button', { class: 'btn sm', on: { click: () => doA(o, 'paid') } }, '標記已付款'), h('button', { class: 'btn sm ghost', on: { click: () => doA(o, 'cancel') } }, '取消')] : null, o.status === 'paid' ? h('button', { class: 'btn sm danger', on: { click: () => doA(o, 'refund') } }, '強制退款') : null)]), '找不到訂單'));
 }));
 route('/admin/refunds', async (_, q) => shell('refunds', async () => {
-  const st = q.status ?? 'pending', list = await api('/api/admin/refunds?status=' + encodeURIComponent(st));
+  const st = q.status ?? '', list = await api('/api/admin/refunds?status=' + encodeURIComponent(st));
   const decide = async (r, decision) => { const note = decision === 'reject' ? await ask('駁回退款', '原因', { multiline: true }) : ''; if (decision === 'reject' && !note) return; if (await act(() => api(`/api/admin/refunds/${r.id}`, { decision, note }))) reload(); };
-  return h('div', {}, h('h1', {}, '退款處理'), h('div', { class: 'row' }, [['pending', '申請中'], ['approved', '申請通過'], ['rejected', '申請駁回'], ['', '全部']].map(([k, n]) => link('/admin/refunds?status=' + k, n, 'chip' + (st === k ? ' on' : '')))),
-    table(['狀態', '計畫', '訂單', '收件人', '金額', '原因', '時間', ''], list.map((r) => [badge(r.statusName, r.status), r.project, r.order, r.recipient, money(r.total), r.reason, dt(r.createdAt), r.status === 'pending' ? h('div', { class: 'row' }, h('button', { class: 'btn sm', on: { click: () => decide(r, 'approve') } }, '同意退款'), h('button', { class: 'btn sm danger', on: { click: () => decide(r, 'reject') } }, '駁回')) : r.note]), '沒有退款申請'));
+  return h('div', {}, h('h1', {}, '退款處理'), h('div', { class: 'row' }, [['', '全部'], ['pending', '申請中'], ['approved', '已退款'], ['rejected', '已駁回']].map(([k, n]) => link('/admin/refunds?status=' + k, n, 'chip' + (st === k ? ' on' : '')))),
+    table(['狀態', '計畫', '訂單', '收件人', '金額', '原因', '時間', ''], list.map((r) => [[badge(r.auto ? '已退款（自行取消）' : r.statusName, r.status)], r.project, r.order, r.recipient, money(r.total), r.reason, dt(r.createdAt), r.status === 'pending' ? h('div', { class: 'row' }, h('button', { class: 'btn sm', on: { click: () => decide(r, 'approve') } }, '同意退款'), h('button', { class: 'btn sm danger', on: { click: () => decide(r, 'reject') } }, '駁回')) : r.note]), '沒有退款申請'));
 }));
 route('/admin/reports', async () => shell('reports', async () => {
   const list = await api('/api/admin/reports');
@@ -120,6 +122,46 @@ route('/admin/users', async (_, q) => shell('users', async () => {
     h('h2', {}, '會員'), h('form', { class: 'filters', on: { submit: (e) => { e.preventDefault(); go('/admin/users?q=' + encodeURIComponent(kw.value)); } } }, kw, h('button', { class: 'btn' }, '搜尋')),
     table(cols, members.map(row), '找不到會員'), list.length >= 300 ? h('p', { class: 'small muted' }, '只列出前 300 筆，其他請用搜尋。') : null);
 }));
+// ---------- 總體報表 ----------
+route('/admin/report', async () => shell('report', async () => {
+  const d = await api('/api/admin/report'), T = d.totals;
+  const csv = () => { const rows = [['專案', '狀態', '執行人', '目標', '累計', '達成率', '訂單', '贊助人', '平均', '退款', '待付款', '測試付款'], ...d.byProject.map((p) => [p.title, p.status, p.executor, p.goal, p.raised, p.percent + '%', p.orders, p.backers, p.avg, p.refunded, p.pending, p.testPay])];
+    const esc = (v) => { let x = String(v ?? ''); if (/^[=+\-@\t\r]/.test(x)) x = "'" + x; return '"' + x.replace(/"/g, '""') + '"'; };   // 防 CSV 公式注入
+    const a = h('a', { href: URL.createObjectURL(new Blob(['﻿' + rows.map((r) => r.map(esc).join(',')).join('\r\n')], { type: 'text/csv' })), download: `總體報表_${new Date().toISOString().slice(0, 10)}.csv` }); document.body.append(a); a.click(); a.remove(); };
+  const k = (label, v, sub) => h('div', { class: 'kpi' }, h('span', {}, label), h('b', {}, v), sub ? h('span', {}, sub) : null);
+  const maxM = Math.max(1, ...d.byMonth.map((m) => m.amount));
+  return h('div', {}, h('div', { class: 'row between' }, h('h1', {}, '總體報表'), h('button', { class: 'btn ghost', on: { click: csv } }, '下載各專案 CSV')),
+    h('p', { class: 'small muted' }, `資料時間 ${dt(d.generatedAt)}。累計含「對照嘖嘖人數」的虛構贊助；測試金流的付款另外標示。`),
+    h('div', { class: 'kpis' }, k('累計護持金額', money(T.raised)), k('付款成功訂單', num(T.orders)), k('贊助人數', num(T.backers)), k('平均每筆', money(T.avg)), k('加碼金額', money(T.bonus)), k('已退款', money(T.refundedAmount), `${num(T.refundedOrders)} 筆`), k('待付款訂單', num(T.pendingOrders)), k('進行中專案', num(T.liveProjects)), k('會員', num(T.members)), k('訪客下單', num(T.guests)), k('測試付款訂單', num(T.testPayOrders)), k('待處理合作申請', num(T.inquiriesOpen))),
+    h('h2', {}, '各專案'), table(['專案', '狀態', '執行人', '目標', '累計', '達成率', '訂單', '贊助人', '退款', '待付款'], d.byProject.map((p) => [link('/p/' + p.slug, p.title), p.status, p.executor, money(p.goal), h('b', {}, money(p.raised)), p.percent + '%', num(p.orders), num(p.backers), money(p.refunded), num(p.pending)])),
+    h('h2', {}, '近 12 個月'), h('div', { class: 'bars' }, d.byMonth.map((m) => h('div', { class: 'bar-row' }, h('span', {}, m.month), h('div', { class: 'bar-t' }, h('i', { style: { width: (m.amount / maxM * 100) + '%' } })), h('span', { class: 'tr' }, money(m.amount))))),
+    table(['月份', '金額', '訂單', '新會員'], d.byMonth.slice().reverse().map((m) => [m.month, money(m.amount), num(m.orders), num(m.members)])),
+    h('div', { class: 'grid2' }, h('div', {}, h('h2', {}, '付款方式'), table(['方式', '金額', '筆數'], d.byPay.map((x) => [x.method, money(x.amount), num(x.orders)]))),
+      h('div', {}, h('h2', {}, '熱門方案 Top 10'), table(['方案', '專案', '份數', '金額'], d.topOptions.map((x) => [x.name, x.project, num(x.qty), money(x.amount)])))));
+}));
+// ---------- AI 助理 ----------
+const aiHistory = [];   // 對話只放在這個分頁的記憶體裡，重新整理就清掉（不存 localStorage，避免個資留在電腦上）
+route('/admin/ai', async () => shell('ai', async () => {
+  const st = await api('/api/admin/ai/status');
+  if (!st.enabled) return h('div', {}, h('h1', {}, 'AI 助理'), h('div', { class: 'card' }, h('h3', {}, 'AI 還沒啟用'), h('p', {}, '請到 Render → fundraising-practice → Environment，新增環境變數：'), h('p', { class: 'mono' }, 'ANTHROPIC_API_KEY ＝ 你的 Anthropic API 金鑰'), h('p', { class: 'small muted' }, '金鑰請自己貼在 Render，不要傳給任何人；設好後主機會自動重開。')));
+  const box = h('div', { class: 'ai-chat' }), q = area('', 3, { placeholder: '例：這個月茅港尾賣最好的三個方案是哪些？／列出還沒付款的訂單／幫我寫一則參天宮的進度更新' });
+  const bubble = (m) => h('div', { class: 'ai-msg ' + m.role }, m.role === 'assistant' ? markup(m.content) : h('p', { class: 'pre' }, m.content), m.tools && m.tools.length ? h('div', { class: 'small muted' }, '查了：' + [...new Set(m.tools)].join('、')) : null);
+  const draw = () => { box.replaceChildren(...(aiHistory.length ? aiHistory.map(bubble) : [h('p', { class: 'muted' }, '可以問任何跟平台資料有關的事：營收、訂單、贊助人、退款、合作申請、留言，也可以請它寫文案、整理名單。AI 只能看資料，不能改資料。')])); box.scrollTop = box.scrollHeight; };
+  const send = h('button', { class: 'btn', on: { click: async () => {
+    const text = q.value.trim(); if (!text) return;
+    aiHistory.push({ role: 'user', content: text }); q.value = ''; draw();
+    send.disabled = true; send.textContent = '思考中…'; box.append(h('div', { class: 'ai-msg assistant muted' }, '查資料中…'));
+    const r = await act(() => api('/api/admin/ai', { messages: aiHistory.map(({ role, content }) => ({ role, content })) }), '');
+    send.disabled = false; send.textContent = '送出';
+    if (r) aiHistory.push({ role: 'assistant', content: r.reply, tools: r.tools }); else aiHistory.pop();
+    draw();
+  } } }, '送出');
+  q.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send.click(); });
+  draw();
+  return h('div', {}, h('div', { class: 'row between' }, h('h1', {}, 'AI 助理'), h('button', { class: 'btn sm ghost', on: { click: () => { aiHistory.length = 0; draw(); } } }, '清除對話')),
+    h('p', { class: 'small muted' }, `模型 ${st.model}・個資${st.fullPII ? '完整給 AI（可在平台設定關掉）' : '已遮蔽電話、地址、Email（可在平台設定打開）'}・對話不會存在伺服器`),
+    box, h('div', { class: 'ai-input' }, q, h('div', { class: 'row between' }, h('span', { class: 'small muted' }, 'Ctrl＋Enter 送出'), send)));
+}));
 route('/admin/inquiries', async () => shell('inquiries', async () => {
   const list = await api('/api/admin/inquiries');
   const ST = { open: '新申請', contacted: '已聯繫', closed: '結案' };
@@ -147,12 +189,13 @@ route('/admin/settings', async () => shell('settings', async () => {
   const s = await api('/api/admin/settings');
   const F = { platformFee: inp(s.platformFee, { type: 'number', step: '0.001' }), credit: inp(s.paymentFee.credit, { type: 'number', step: '0.001' }), atm: inp(s.paymentFee.atm, { type: 'number', step: '0.001' }), aftee: inp(s.paymentFee.aftee, { type: 'number', step: '0.001' }),
     personLimit30d: inp(s.personLimit30d, { type: 'number' }), companyLimit: inp(s.companyLimit, { type: 'number' }), payoutWorkdays: inp(s.payoutWorkdays, { type: 'number' }), subscriptionPayoutDay: inp(s.subscriptionPayoutDay, { type: 'number' }), minDays: inp(s.minDays, { type: 'number' }), maxDays: inp(s.maxDays, { type: 'number' }), atmRefundFee: inp(s.atmRefundFee, { type: 'number' }),
-    aonCrowd: chk(s.allOrNothing.crowd), aonPre: chk(s.allOrNothing.preorder), aonCoop: chk(s.allOrNothing.coop), testPayment: chk(!!s.testPayment), categories: area(s.categories.join('\n'), 8) };
-  const save = () => act(() => api('/api/admin/settings', { platformFee: Number(F.platformFee.value), paymentFee: { credit: Number(F.credit.value), atm: Number(F.atm.value), aftee: Number(F.aftee.value) }, personLimit30d: Number(F.personLimit30d.value), companyLimit: Number(F.companyLimit.value), payoutWorkdays: Number(F.payoutWorkdays.value), subscriptionPayoutDay: Number(F.subscriptionPayoutDay.value), minDays: Number(F.minDays.value), maxDays: Number(F.maxDays.value), atmRefundFee: Number(F.atmRefundFee.value), allOrNothing: { crowd: F.aonCrowd.checked, preorder: F.aonPre.checked, coop: F.aonCoop.checked }, testPayment: F.testPayment.checked, categories: F.categories.value.split('\n') }));
+    aonCrowd: chk(s.allOrNothing.crowd), aonPre: chk(s.allOrNothing.preorder), aonCoop: chk(s.allOrNothing.coop), testPayment: chk(!!s.testPayment), aiFullPII: chk(!!s.aiFullPII), categories: area(s.categories.join('\n'), 8) };
+  const save = () => act(() => api('/api/admin/settings', { platformFee: Number(F.platformFee.value), paymentFee: { credit: Number(F.credit.value), atm: Number(F.atm.value), aftee: Number(F.aftee.value) }, personLimit30d: Number(F.personLimit30d.value), companyLimit: Number(F.companyLimit.value), payoutWorkdays: Number(F.payoutWorkdays.value), subscriptionPayoutDay: Number(F.subscriptionPayoutDay.value), minDays: Number(F.minDays.value), maxDays: Number(F.maxDays.value), atmRefundFee: Number(F.atmRefundFee.value), allOrNothing: { crowd: F.aonCrowd.checked, preorder: F.aonPre.checked, coop: F.aonCoop.checked }, testPayment: F.testPayment.checked, aiFullPII: F.aiFullPII.checked, categories: F.categories.value.split('\n') }));
   return h('div', {}, h('h1', {}, '平台設定'), h('section', { class: 'card' }, h('h3', {}, '手續費（小數：0.055＝5.5%）'), h('div', { class: 'grid3' }, field('平台手續費', F.platformFee), field('金流費：信用卡', F.credit), field('金流費：ATM', F.atm), field('金流費：AFTEE', F.aftee), field('ATM 退款轉帳手續費（元）', F.atmRefundFee))),
     h('section', { class: 'card' }, h('h3', {}, '集資上限與時程'), h('div', { class: 'grid3' }, field('自然人 30 天上限', F.personLimit30d), field('法人第一階段上限', F.companyLimit), field('最短天數', F.minDays), field('最長天數', F.maxDays), field('撥款：完結後幾個工作日', F.payoutWorkdays), field('訂閱撥款：次月幾號', F.subscriptionPayoutDay))),
     h('section', { class: 'card' }, h('h3', {}, '沒達標就全部退款（全有或全無）'), field('群眾集資', F.aonCrowd), field('預購式專案', F.aonPre), field('合作式專案', F.aonCoop)),
     h('section', { class: 'card' }, h('h3', {}, '測試金流'), field('開啟測試金流（付款頁可以操作，但不會真的扣款；訂單標記為測試付款）', F.testPayment), h('p', { class: 'small muted' }, '串好真的金流前，對外正式收單時請關掉：關掉後付款頁會顯示「線上付款尚未開放」。')),
+    h('section', { class: 'card' }, h('h3', {}, 'AI 助理'), field('讓 AI 看到完整個資（電話、地址、Email）', F.aiFullPII), h('p', { class: 'small muted' }, '預設關：給 AI 的資料會把電話、地址、Email 遮一半。打開代表把信眾個資交給 AI 服務商（Anthropic）處理，隱私權政策要寫清楚。')),
     h('section', { class: 'card' }, h('h3', {}, '分類（一行一個）'), F.categories), h('button', { class: 'btn big', on: { click: save } }, '儲存設定'));
 }));
 route('/admin/emails', async () => shell('emails', async () => { const list = await api('/api/admin/emails'); return h('div', {}, h('h1', {}, '寄信紀錄'), table(['時間', '收件人', '類型', '主旨', '內容'], list.map((m) => [dt(m.at), m.to, m.kind, m.subject, h('details', {}, h('summary', {}, '展開'), h('p', { class: 'pre small' }, m.body))]))); }));

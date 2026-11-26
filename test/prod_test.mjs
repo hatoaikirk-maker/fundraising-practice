@@ -14,7 +14,14 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 21000 + Math.floor(Math.random() * 20000), B = `http://127.0.0.1:${PORT}`;
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fpp-prod-'));
 const ADMIN = 'boss@lifemap.local', ADMIN_PW = 'Pr0d-' + Math.random().toString(36).slice(2, 12);   // 每次測試亂數，不寫死任何密碼
-const srv = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { PATH: process.env.PATH, PORT: String(PORT), DATA_DIR: dir, ADMIN_EMAIL: ADMIN, ADMIN_PASSWORD: ADMIN_PW }, stdio: ['ignore', 'pipe', 'pipe'] });
+// 假的 Anthropic API：第一次回「要查訂單」，第二次回文字；把伺服器送來的內容記下來，檢查個資有沒有遮
+import http from 'node:http';
+const aiSeen = []; let aiRound = 0;
+const mock = http.createServer((req, res) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => { const j = JSON.parse(b); aiSeen.push({ key: req.headers['x-api-key'], body: j }); aiRound++;
+  const out = aiRound % 2 === 1 ? { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'search_orders', input: { status: 'paid' } }] } : { stop_reason: 'end_turn', content: [{ type: 'text', text: '本月付款成功 **2 筆**' }] };
+  res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(out)); }); });
+await new Promise((r) => mock.listen(0, '127.0.0.1', r));
+const srv = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { PATH: process.env.PATH, PORT: String(PORT), DATA_DIR: dir, ADMIN_EMAIL: ADMIN, ADMIN_PASSWORD: ADMIN_PW, ANTHROPIC_API_KEY: 'test-key-xyz', ANTHROPIC_BASE_URL: `http://127.0.0.1:${mock.address().port}` }, stdio: ['ignore', 'pipe', 'pipe'] });
 let log = ''; srv.stdout.on('data', (d) => { log += d; }); srv.stderr.on('data', (d) => { log += d; });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 function client() {
@@ -120,13 +127,13 @@ try {
   ok((await ad.post('/api/admin/users', { email: 'staff1@lifemap.local', name: '小編', role: 'staff' })).s === 400, '同一個 Email 不能新增兩次');
   ok((await ad.post('/api/admin/users', { email: 'x@lifemap.local', name: 'x', role: 'superuser' })).s === 400, '亂填角色：擋下');
   const st = client(); ok((await st.login('staff1@lifemap.local', add.j.tempPassword)).s === 200, '一般人員用臨時密碼登入');
-  ok((await st.get('/api/admin/review')).s === 200 && (await st.get('/api/admin/orders')).s === 200, '一般人員：可以審核、看訂單');
+  ok((await st.get('/api/admin/projects')).s === 200 && (await st.get('/api/admin/orders')).s === 200 && (await st.get('/api/admin/report')).s === 200, '一般人員：可以管計畫、看訂單、看總體報表');
   ok((await st.get('/api/admin/users')).s === 404 && (await st.get('/api/admin/payouts')).s === 404 && (await st.post('/api/admin/settings', {})).s === 404 && (await st.post('/api/admin/users', { email: 'y@x.tw', name: 'y', role: 'admin' })).s === 404, '一般人員：不能管人員、撥款、設定，也不能自己新增管理員');
   ok((await bk.post('/api/admin/users', { email: 'z@x.tw', name: 'z', role: 'admin' })).s === 404, '一般會員：新增人員 404');
   const sid = add.j.id;
   const rp = await ad.post(`/api/admin/users/${sid}`, { action: 'resetpw' });
   ok(rp.s === 200 && rp.j.tempPassword && rp.j.tempPassword !== add.j.tempPassword && rp.j.tempPassword !== 'Demo1234', '重設密碼：產生新的臨時密碼（不是固定的 Demo1234）');
-  ok((await st.get('/api/admin/review')).s === 401, '重設密碼後，那個人原本的登入被登出（要重新登入）');
+  ok((await st.get('/api/admin/orders')).s === 401, '重設密碼後，那個人原本的登入被登出（要重新登入）');
   // ---------- 公司自己經營（手手公益模式）----------
   ok((await bk.post('/api/start', { type: 'crowd', title: '我想提案' })).s === 404, '一般會員不能自己發起計畫（改走合作申請）');
   const inq = await anon.post('/api/inquiry', { org: '○○宮', name: '王主委', phone: '0912000111', content: '想募資修繕屋頂，大約一百萬。' });
@@ -149,10 +156,31 @@ try {
   ok((await bk.post('/api/admin/site', { about: 'x' })).s === 404 && (await st.post('/api/admin/site', { about: 'x' })).s !== 200, '首頁內容只有管理員能改');
   await ad.post('/api/admin/site', { about: '初心', wall: [{ tag: '修廟', text: '很感動', who: '台南陳小姐' }, { text: '', who: '' }] });
   const h3 = (await anon.get('/api/home')).j; ok(h3.about === '初心' && h3.wall.length === 1, '首頁內容：初心、回饋牆（空的丟掉）');
+  // ---------- 後台修改（KIRK 六點）----------
+  const rep = await ad.get('/api/admin/report');
+  ok(rep.s === 200 && rep.j.totals.raised > 0 && rep.j.byProject.length >= 4 && rep.j.byMonth.length === 12 && rep.j.topOptions.length > 0, '一、總體報表：總計、各專案、12 個月、熱門方案');
+  ok((await bk.get('/api/admin/report')).s === 404, '一、一般會員看不到總體報表');
+  // 二、贊助成功後在募資期間取消（＝退款）：後台退款處理看得到
+  const rf = await mkOrder(bk, 'fan.real@example.com');
+  await bk.post(`/api/orders/${rf.j.token}/pay`, { last4: '4242' });
+  ok((await bk.post(`/api/my/orders/${rf.j.token}/cancel`, {})).s === 200, '二、贊助人取消已付款訂單（退款）');
+  const rfs = (await ad.get('/api/admin/refunds')).j;
+  ok(rfs.some((r) => r.order === rf.j.token && r.status === 'approved'), '二、後台「退款處理」看得到這筆退款');
+  ok((await bk.post('/api/reports', { kind: 'project', targetId: 1, reason: 'x' })).s === 404 && (await ad.get('/api/admin/reports')).s === 404, '三、檢舉功能與後台：關掉（404）');
+  ok((await ad.get('/api/admin/notices')).s === 404 && (await anon.get('/api/me')).j.notices.length === 0, '四、首頁公告：刪除');
+  ok((await ad.get('/api/admin/review')).s === 404, '五、審核流程：刪除');
+  // 六、AI 助理
+  ok((await st.post('/api/admin/ai', { messages: [{ role: 'user', content: '嗨' }] })).s !== 200 && (await bk.post('/api/admin/ai', { messages: [{ role: 'user', content: '嗨' }] })).s === 404, '六、AI：只有管理員能用');
+  const ai = await ad.post('/api/admin/ai', { messages: [{ role: 'user', content: '這個月付款成功幾筆？' }] });
+  ok(ai.s === 200 && ai.j.reply.includes('2 筆') && ai.j.tools.includes('search_orders'), '六、AI：會呼叫查詢工具再回答');
+  const sent = JSON.stringify(aiSeen.map((x) => x.body));
+  ok(aiSeen.every((x) => x.key === 'test-key-xyz') && !JSON.stringify(ai.j).includes('test-key-xyz'), '六、AI 金鑰只在伺服器，不會回給前端');
+  ok(sent.includes('tool_result') && !sent.includes('0911222333') && !sent.includes('某路 1 號'), '六、AI：預設遮蔽電話、地址');
+  ok((await ad.post('/api/admin/ai', { messages: [] })).s === 400, '六、AI：空問題擋下');
   await wait(1300);
   const db = fs.readFileSync(path.join(dir, 'db.json'), 'utf8');
   ok(!db.includes(rp.j.tempPassword) && !db.includes(ADMIN_PW), '資料檔裡找不到任何明文密碼');
 } catch (e) { fail++; console.log('  ✗ 測試中斷：' + (e && e.stack || e)); }
-finally { srv.kill(); await wait(200); fs.rmSync(dir, { recursive: true, force: true }); }
+finally { srv.kill(); mock.close(); await wait(200); fs.rmSync(dir, { recursive: true, force: true }); }
 console.log(`正式模式：通過 ${pass}、失敗 ${fail}`);
 process.exit(fail ? 1 : 0);

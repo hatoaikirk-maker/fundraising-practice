@@ -15,7 +15,7 @@ async function shell(pid, key, content) {
   const d = await api(`/api/c/${pid}`), p = d.project;
   const staff = state.me && state.me.role !== 'member';
   const side = h('nav', { class: 'side' }, staff ? link('/admin/projects', '← 回上架後台（計畫管理）', 'side-a back') : null, h('div', { class: 'side-h' }, badge(p.typeName), h('b', {}, p.title), h('div', { class: 'muted small' }, `#${p.id}　`, link('/p/' + p.slug, '前台頁面 ↗'))),
-    MENU.map(([k, label]) => link(`/c/${pid}${k ? '/' + k : ''}`, label, 'side-a' + (k === key ? ' on' : ''))));
+    MENU.filter(([k]) => state.demo || !['business', 'payment'].includes(k)).map(([k, label]) => link(`/c/${pid}${k ? '/' + k : ''}`, label, 'side-a' + (k === key ? ' on' : ''))));
   return h('div', { class: 'dash' }, side, h('div', { class: 'dash-main' }, await content(d)));
 }
 const pidOf = (x) => Number(x.pid);
@@ -32,6 +32,9 @@ route('/c/:pid', async (x) => shell(pidOf(x), '', (d) => {
   };
   const st = d.stats;
   return h('div', {}, h('h1', {}, '控制中心'),
+    // 正式模式沒有審核流程（KIRK：「審核流程功能刪除」）：直接顯示上架狀態＋上架按鈕
+    !state.demo ? h('section', { class: 'card' }, h('h3', {}, '上架狀態'), h('p', {}, badge(p.statusName, p.status), `　準備度：回饋 ${d.ready.options ? '✓' : '✗'}　內容 ${d.ready.content ? '✓' : '✗'}　時程 ${d.ready.schedule ? '✓' : '✗'}`),
+      ['draft', 'reviewing'].includes(p.status) && state.me && state.me.role !== 'member' ? h('button', { class: 'btn', on: { click: async () => { if (await act(() => api(`/api/admin/projects/${p.id}`, { action: 'publish' }), '已上架')) go(`/c/${p.id}`, true); } } }, '上架') : null) :
     h('section', { class: 'card' }, h('h3', {}, '提案審核'), d.manager ? h('p', { class: 'small muted' }, '專屬專案經理：' + d.manager) : null, h('ol', { class: 'steps' }, d.steps.map(stepRow)),
       h('p', { class: 'small muted' }, `準備度：回饋 ${d.ready.options ? '✓' : '✗'}　內容 ${d.ready.content ? '✓' : '✗'}　時程 ${d.ready.schedule ? '✓' : '✗'}`), d.timeLocked ? h('p', { class: 'small' }, '🔒 方案與回饋已通過：網址、目標、類型、時間已鎖定，要改請聯繫專案經理') : null),
     h('section', { class: 'card' }, h('h3', {}, '專案執行期間'), h('p', {}, h('b', {}, d.left), p.type === 'subscription' ? '' : `　至 ${dt(p.endAt)} (UTC+8)`), h('p', {}, '狀態：', badge(p.statusName, p.status)),

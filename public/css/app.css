@@ -310,3 +310,10 @@ input.sm { min-height: 36px; padding: 4px 8px; width: 110px; } input.qty { width
 .gw-tbl { width: 100%; border-collapse: collapse; margin: 8px 0 12px; } .gw-tbl th, .gw-tbl td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); } .gw-tbl th { color: var(--mute); font-weight: 400; width: 96px; }
 .consent .field.check { align-items: flex-start; } .consent .field.check span { font-weight: 400; font-size: .92rem; }
 @media (max-width: 760px) { .gw-body { grid-template-columns: 1fr; } .gw-sum { border-left: 0; border-top: 1px solid var(--line); } }
+/* ---------- AI 助理 ---------- */
+.ai-chat { border: 1px solid var(--line); border-radius: 12px; padding: 16px; height: min(58vh, 560px); overflow: auto; background: var(--soft); display: flex; flex-direction: column; gap: 12px; }
+.ai-msg { max-width: 88%; padding: 10px 14px; border-radius: 12px; background: #fff; border: 1px solid var(--line); }
+.ai-msg.user { align-self: flex-end; background: var(--ac-soft); border-color: #f0cfca; }
+.ai-msg .rich { font-size: .94rem; } .ai-msg p { margin: .3em 0; }
+.ai-input { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.side-a.back { color: var(--ac); font-weight: 700; border-bottom: 1px solid var(--line); border-radius: 0; margin-bottom: 4px; }
