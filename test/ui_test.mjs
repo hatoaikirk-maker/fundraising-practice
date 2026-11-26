@@ -46,7 +46,7 @@ try {
   // ---------- 前台（沒登入）----------
   await visit('/', '群眾集資');
   ok(W.document.querySelector('.logo').textContent.includes('人生地圖') && !/練習|模擬/.test(W.document.body.textContent), '頁首：人生地圖募資；全站沒有「練習／模擬」字樣');
-  await visit('/explore', '探索');
+  await visit('/explore', '護持專案');
   await visit('/explore?type=subscription', '每月點一盞平安燈');
   // 嘖嘖移植的計畫：圖片、GIF、Vimeo（不公開連結要帶 h=）、回饋圖片
   await visit('/p/moga', '全台唯一・大北門媽祖');
@@ -63,7 +63,7 @@ try {
   await visit('/p/demo-light-wall?tab=faqs', '沒有達到募資目標');
   await visit('/p/demo-light-wall?tab=backers', '贊助人');
   await visit('/p/demo-light-wall?code=VIP2027', '親友限定');
-  await visit('/start', '群眾集資');
+  await visit('/inquiry', '宮廟合作申請');
   await visit('/help/payment', '撥款');
   await visit('/u/creator', '麥睿示範提案人');
   await visit('/me/orders', '請先登入');
@@ -71,7 +71,7 @@ try {
   // ---------- 贊助人：結帳 ----------
   await login('backer3@demo.local');
   const p = await core.api('/api/p/demo-light-wall');
-  await visit(`/p/demo-light-wall/checkout?option=${p.options[0].id}`, '1. 回饋與數量');
+  await visit(`/p/demo-light-wall/checkout?option=${p.options[0].id}`, '1. 護持方案');
   await until(() => text().includes('總金額'));   // 金額試算是非同步的，等它算完
   ok(text().includes('2. 收件資料') && text().includes('4. 付款方式') && text().includes('總金額'), '結帳頁：數量、收件、付款、金額試算都在');
   await wait(300); ok(!/\bnull\b|undefined/.test(text()), '結帳頁：沒有出現 null／undefined 字樣（實看抓到的）');

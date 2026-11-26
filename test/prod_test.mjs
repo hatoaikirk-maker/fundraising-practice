@@ -78,6 +78,28 @@ try {
   const rp = await ad.post(`/api/admin/users/${sid}`, { action: 'resetpw' });
   ok(rp.s === 200 && rp.j.tempPassword && rp.j.tempPassword !== add.j.tempPassword && rp.j.tempPassword !== 'Demo1234', '重設密碼：產生新的臨時密碼（不是固定的 Demo1234）');
   ok((await st.get('/api/admin/review')).s === 401, '重設密碼後，那個人原本的登入被登出（要重新登入）');
+  // ---------- 公司自己經營（手手公益模式）----------
+  ok((await bk.post('/api/start', { type: 'crowd', title: '我想提案' })).s === 404, '一般會員不能自己發起計畫（改走合作申請）');
+  const inq = await anon.post('/api/inquiry', { org: '○○宮', name: '王主委', phone: '0912000111', content: '想募資修繕屋頂，大約一百萬。' });
+  ok(inq.s === 200, '合作申請：任何人都能送');
+  ok((await anon.post('/api/inquiry', { org: '', name: 'x', phone: '1', content: 'a' })).s === 400, '合作申請：亂填擋下');
+  ok((await ad.get('/api/admin/inquiries')).j.some((q) => q.org === '○○宮'), '後台看得到合作申請');
+  ok((await bk.get('/api/admin/inquiries')).s === 404, '一般會員看不到合作申請');
+  const mk = await ad.post('/api/start', { type: 'crowd', title: '測試新計畫' });
+  ok(mk.s === 200, '管理員可以新增計畫');
+  const pid2 = mk.j.id;
+  ok((await anon.get('/api/p/' + (await ad.get('/api/c/' + pid2)).j.project.slug)).s === 404, '新計畫還沒上架，前台看不到');
+  ok((await ad.post(`/api/admin/projects/${pid2}`, { action: 'publish' })).s === 400, '沒有內容、方案不能上架');
+  const home2 = (await anon.get('/api/home')).j;
+  const moga = home2.live.find((x) => x.slug === 'moga');
+  ok(moga && moga.executor === '茅港尾天后宮' && moga.stage && moga.stage.n === 1 && moga.stage.percent === Math.floor(moga.raised / moga.goal * 100), '首頁：執行人、第 1 階段達成率');
+  const pm = (await ad.get('/api/c/' + moga.id)).j.project;
+  ok((await ad.post(`/api/c/${moga.id}/project`, { ...pm, startAt: pm.startAt, endAt: pm.endAt, stages: [{ name: '基本工程', goal: 154000 }, { name: '全面完工', goal: 600000 }, { name: '<b>x</b>', goal: -5 }] })).s === 200, '設定階段目標（亂填的階段丟掉）');
+  const m2 = (await anon.get('/api/p/moga')).j;
+  ok(m2.stage.total === 2 && m2.stage.n === 2 && m2.stage.name === '全面完工' && m2.stage.list[0].done, '階段：第 1 階段達成後顯示第 2 階段');
+  ok((await bk.post('/api/admin/site', { about: 'x' })).s === 404 && (await st.post('/api/admin/site', { about: 'x' })).s !== 200, '首頁內容只有管理員能改');
+  await ad.post('/api/admin/site', { about: '初心', wall: [{ tag: '修廟', text: '很感動', who: '台南陳小姐' }, { text: '', who: '' }] });
+  const h3 = (await anon.get('/api/home')).j; ok(h3.about === '初心' && h3.wall.length === 1, '首頁內容：初心、回饋牆（空的丟掉）');
   await wait(1300);
   const db = fs.readFileSync(path.join(dir, 'db.json'), 'utf8');
   ok(!db.includes(rp.j.tempPassword) && !db.includes(ADMIN_PW), '資料檔裡找不到任何明文密碼');

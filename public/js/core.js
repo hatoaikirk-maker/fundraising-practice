@@ -66,10 +66,11 @@ export const setNotFound = (fn) => { notFound = fn; };
 let renderHook = null;
 export const onRender = (fn) => { renderHook = fn; };
 export function go(href, replace = false) { if (replace) history.replaceState(null, '', href); else history.pushState(null, '', href); render(); }
+// 換頁後：網址有 #區塊（例如 /#story）就捲到那個區塊，不然回到最上面
 export async function render() {
   const u = new URL(location.href);
   const q = Object.fromEntries(u.searchParams);
-  for (const r of routes) { const m = r.re.exec(decodeURIComponent(u.pathname)); if (m) { const view = $('#view'); view.replaceChildren(h('div', { class: 'loading' }, '載入中…')); try { const out = await r.fn({ ...(m.groups || {}) }, q); view.replaceChildren(out); } catch (e) { view.replaceChildren(errorBox(e)); } if (renderHook) renderHook(u.pathname); window.scrollTo(0, 0); return; } }
+  for (const r of routes) { const m = r.re.exec(decodeURIComponent(u.pathname)); if (m) { const view = $('#view'); view.replaceChildren(h('div', { class: 'loading' }, '載入中…')); try { const out = await r.fn({ ...(m.groups || {}) }, q); view.replaceChildren(out); } catch (e) { view.replaceChildren(errorBox(e)); } if (renderHook) renderHook(u.pathname); const anchor = u.hash && document.getElementById(u.hash.slice(1)); if (anchor) anchor.scrollIntoView({ behavior: 'smooth' }); else window.scrollTo(0, 0); return; } }
   $('#view').replaceChildren(notFound ? notFound() : h('p', {}, '找不到'));
 }
 window.addEventListener('popstate', render);

@@ -9,8 +9,8 @@
 import { h, link, go, api, state, toast, act, modal, ask, money, num, dt, dtInput, ago, field, inp, area, sel, chk, table, badge, markup, route } from './core.js';
 
 // [網址, 名稱, 只有管理員看得到, 只有測試模式才有]
-const MENU = [['', '總覽'], ['review', '提案審核'], ['projects', '計畫管理'], ['orders', '訂單管理'], ['refunds', '退款處理'], ['reports', '檢舉處理'], ['comments', '留言管理'], ['notices', '首頁公告'],
-  ['users', '人員與會員', true], ['payouts', '撥款結算', true], ['settings', '平台設定', true], ['emails', '寄信紀錄', true], ['audit', '操作紀錄', true], ['clock', '時鐘與重置（測試模式）', true, true]];
+const MENU = [['', '總覽'], ['projects', '計畫管理'], ['inquiries', '合作申請'], ['review', '審核流程'], ['orders', '訂單管理'], ['refunds', '退款處理'], ['reports', '檢舉處理'], ['comments', '留言管理'], ['notices', '首頁公告'],
+  ['users', '人員與會員', true], ['site', '首頁內容', true], ['payouts', '撥款結算', true], ['settings', '平台設定', true], ['emails', '寄信紀錄', true], ['audit', '操作紀錄', true], ['clock', '時鐘與重置（測試模式）', true, true]];
 const ROLE_NAMES = { member: '一般會員', staff: '一般人員', admin: '管理員' };
 async function shell(key, content) {
   const isAdmin = state.me && state.me.role === 'admin';
@@ -52,9 +52,11 @@ route('/admin/projects', async (_, q) => shell('projects', async () => {
   const doA = async (p, action, extra = {}) => { if (action === 'suspend') { extra.note = await ask('下架計畫', '原因（提案人會收到）', { multiline: true }); if (!extra.note) return; } if (await act(() => api(`/api/admin/projects/${p.id}`, { action, ...extra }))) reload(); };
   const sched = (p) => { const s = inp(dtInput(p.startAt)), e = inp(dtInput(p.endAt)); modal('調整時間：' + p.title, h('div', {}, field('開始 (UTC+8)', s), field('結束 (UTC+8)', e), h('p', { class: 'small muted' }, '延長募資、提前結束都在這裡；改成過去的時間＝下次巡檢就結束。')), [{ text: '儲存', fn: async () => { const ok = await act(() => api(`/api/admin/projects/${p.id}`, { action: 'schedule', startAt: s.value, endAt: e.value })); if (ok) reload(); return !!ok; } }]); };
   const mgr = (p) => { const s = sel(Object.fromEntries(staff.map((u) => [u.id, u.name])), String(p.managerId || '')); modal('指派專案經理', field('專案經理', s), [{ text: '指派', fn: async () => { const ok = await act(() => api(`/api/admin/projects/${p.id}`, { action: 'manager', managerId: Number(s.value) })); if (ok) reload(); return !!ok; } }]); };
-  return h('div', {}, h('h1', {}, '計畫管理'), h('form', { class: 'filters', on: { submit: (e) => { e.preventDefault(); const n = new URLSearchParams(); if (kw.value) n.set('q', kw.value); if (st.value) n.set('status', st.value); go('/admin/projects?' + n.toString()); } } }, kw, st, h('button', { class: 'btn' }, '搜尋')),
-    table(['計畫', '提案人', '專案經理', '狀態', '集資', '時間', '首頁', '操作'], list.map((p) => [link('/p/' + p.slug, p.title), p.owner, p.manager || '—', badge(p.statusName, p.status), `${money(p.raised)}（${p.percent}%）`, `${dt(p.startAt, false)}～${dt(p.endAt, false)}`, [p.featured ? badge('主打') : '', p.staffPick ? badge('精選', 'gold') : ''],
-      h('div', { class: 'row wrap' }, h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'feature') } }, p.featured ? '取消主打' : '首頁主打'), h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'pick') } }, p.staffPick ? '取消精選' : '編輯精選'), h('button', { class: 'btn sm ghost', on: { click: () => sched(p) } }, '調整時間'), h('button', { class: 'btn sm ghost', on: { click: () => mgr(p) } }, '指派經理'), link(`/c/${p.id}`, '進後台', 'btn sm ghost'),
+  const create = async () => { const type = sel(state.meta.types, 'crowd'), title = inp(''); modal('新增計畫', h('div', {}, field('類型', type), field('計畫名稱', title), h('p', { class: 'small muted' }, '建好後進後台寫內容、方案，再回這裡按「上架」。')), [{ text: '建立', fn: async () => { const r = await act(() => api('/api/start', { type: type.value, title: title.value }), '已建立草稿'); if (r) go(`/c/${r.id}/edit`); return !!r; } }]); };
+  return h('div', {}, h('div', { class: 'row between' }, h('h1', {}, '計畫管理'), h('button', { class: 'btn', on: { click: create } }, '＋ 新增計畫')), h('form', { class: 'filters', on: { submit: (e) => { e.preventDefault(); const n = new URLSearchParams(); if (kw.value) n.set('q', kw.value); if (st.value) n.set('status', st.value); go('/admin/projects?' + n.toString()); } } }, kw, st, h('button', { class: 'btn' }, '搜尋')),
+    table(['計畫', '執行人', '負責人員', '狀態', '集資', '時間', '首頁', '操作'], list.map((p) => [link('/p/' + p.slug, p.title), p.executor || p.owner, p.manager || '—', badge(p.statusName, p.status), `${money(p.raised)}（${p.percent}%）`, `${dt(p.startAt, false)}～${dt(p.endAt, false)}`, [p.featured ? badge('主打') : '', p.staffPick ? badge('精選', 'gold') : ''],
+      h('div', { class: 'row wrap' }, h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'feature') } }, p.featured ? '取消主打' : '首頁主打'), h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'pick') } }, p.staffPick ? '取消精選' : '編輯精選'), h('button', { class: 'btn sm ghost', on: { click: () => sched(p) } }, '調整時間'), h('button', { class: 'btn sm ghost', on: { click: () => mgr(p) } }, '指派負責人'), link(`/c/${p.id}`, '進後台', 'btn sm ghost'),
+        ['draft', 'reviewing'].includes(p.status) ? h('button', { class: 'btn sm', on: { click: () => doA(p, 'publish') } }, '上架') : null,
         p.status === 'suspended' ? h('button', { class: 'btn sm', on: { click: () => doA(p, 'restore') } }, '恢復上架') : h('button', { class: 'btn sm danger', on: { click: () => doA(p, 'suspend') } }, '下架'), state.me.role === 'admin' && p.steps && p.steps.plan === 'ok' ? h('button', { class: 'btn sm ghost', on: { click: () => doA(p, 'unlock') } }, '解鎖時間') : null)])));
 }));
 
@@ -109,6 +111,24 @@ route('/admin/users', async (_, q) => shell('users', async () => {
     h('h2', {}, `平台人員（${staff.length}）`), table(cols, staff.map(row), '沒有平台人員'),
     h('h2', {}, '會員'), h('form', { class: 'filters', on: { submit: (e) => { e.preventDefault(); go('/admin/users?q=' + encodeURIComponent(kw.value)); } } }, kw, h('button', { class: 'btn' }, '搜尋')),
     table(cols, members.map(row), '找不到會員'), list.length >= 300 ? h('p', { class: 'small muted' }, '只列出前 300 筆，其他請用搜尋。') : null);
+}));
+route('/admin/inquiries', async () => shell('inquiries', async () => {
+  const list = await api('/api/admin/inquiries');
+  const ST = { open: '新申請', contacted: '已聯繫', closed: '結案' };
+  const set = async (q, status) => { const note = status === 'closed' ? await ask('結案', '備註（選填）', { value: q.note, multiline: true }) : q.note; if (note === undefined) return; if (await act(() => api(`/api/admin/inquiries/${q.id}`, { status, note }))) reload(); };
+  return h('div', {}, h('h1', {}, '宮廟合作申請'), h('p', { class: 'small muted' }, '前台「合作申請」送進來的表單。聯絡過就按「已聯繫」，談完按「結案」。'),
+    table(['時間', '宮廟（單位）', '聯絡人', '電話／Email／LINE', '內容', '狀態', ''], list.map((q) => [dt(q.createdAt), q.org, q.name, [q.phone, q.email, q.line].filter(Boolean).join('／'), h('details', {}, h('summary', {}, q.content.slice(0, 16) + (q.content.length > 16 ? '…' : '')), h('p', { class: 'pre small' }, q.content), q.note ? h('p', { class: 'small muted' }, '備註：' + q.note) : null), badge(ST[q.status], q.status === 'open' ? 'pending' : q.status === 'closed' ? 'gray' : 'ok'),
+      h('div', { class: 'row' }, q.status === 'open' ? h('button', { class: 'btn sm', on: { click: () => set(q, 'contacted') } }, '已聯繫') : null, q.status !== 'closed' ? h('button', { class: 'btn sm ghost', on: { click: () => set(q, 'closed') } }, '結案') : null)]), '還沒有申請'));
+}));
+route('/admin/site', async () => shell('site', async () => {
+  const s = await api('/api/admin/site');
+  const about = area(s.about, 8, { placeholder: '首頁「人生地圖初心」的文字（可以用 **粗體**、[連結](網址)）；空白就用預設文字' });
+  const rows = h('div'); const wall = (s.wall || []).slice();
+  const draw = () => rows.replaceChildren(...wall.map((w, i) => { const t = inp(w.tag, { placeholder: '分類（例：修廟）' }), x = inp(w.text, { placeholder: '回饋內容（真實的留言，120 字內）' }), who = inp(w.who, { placeholder: '署名（例：台南陳小姐）' }); for (const [e, k] of [[t, 'tag'], [x, 'text'], [who, 'who']]) e.addEventListener('input', () => { wall[i][k] = e.value; }); return h('div', { class: 'grid3' }, t, x, h('div', { class: 'row' }, who, h('button', { class: 'btn sm danger', on: { click: () => { wall.splice(i, 1); draw(); } } }, '刪除'))); }));
+  draw();
+  return h('div', {}, h('h1', {}, '首頁內容'), h('section', { class: 'card' }, h('h3', {}, '人生地圖初心'), about),
+    h('section', { class: 'card' }, h('h3', {}, '愛心回饋牆（最多 12 則；請放真實的信眾回饋，沒有就留空，首頁不會顯示這區）'), rows, h('button', { class: 'btn ghost', on: { click: () => { if (wall.length < 12) { wall.push({ tag: '', text: '', who: '' }); draw(); } } } }, '＋ 新增一則')),
+    h('button', { class: 'btn big', on: { click: () => act(() => api('/api/admin/site', { about: about.value, wall }), '已儲存') } }, '儲存'));
 }));
 route('/admin/payouts', async () => shell('payouts', async () => {
   const list = await api('/api/admin/payouts');

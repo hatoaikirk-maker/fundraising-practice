@@ -46,9 +46,16 @@ route('/c/:pid/edit', async (x) => shell(pidOf(x), 'edit', (d) => {
     goal: inp(p.goal, { type: 'number', disabled: L }), startAt: inp(dtInput(p.startAt), { placeholder: 'YYYY-MM-DD HH:mm', disabled: L }), endAt: inp(dtInput(p.endAt), { placeholder: 'YYYY-MM-DD HH:mm', disabled: L }),
     type: sel(state.meta.types, p.type, { disabled: L }), ageLimit: sel({ 0: '無', 18: '18' }, String(p.ageLimit)), category: sel(cats, p.category), origin: sel(state.meta.origins, p.origin), slug: inp(p.slug, { disabled: L }), video: inp(p.video, { placeholder: 'YouTube／Vimeo 網址' }),
     contact: area(p.contact, 3), risk: area(p.risk, 4), returns: area(p.returns, 4), afteeNote: area(p.afteeNote, 3), ga: inp(p.ga, { placeholder: 'G-A1BCDEGHI2' }), pixel: inp(p.pixel, { placeholder: '1274632934827378' }), gCat: inp(p.gCat, { placeholder: '例：藝術與娛樂 > 嗜好與創意藝術' }),
+    executor: inp(p.executor || '', { placeholder: '例：茅港尾天后宮' }), executorUrl: inp(p.executorUrl || '', { placeholder: '廟方粉專或網站（https://）' }),
     invoiceFormat: sel(state.meta.invoiceFormats, p.invoiceFormat), bsmi: inp(p.bsmi, { placeholder: '(R、D、T、M、Q + 5 個英數字)' }), ncc: inp(p.ncc, { placeholder: '(CCXXxxYYyyyZzW 共 14 碼)' }), optionOrder: sel({ custom: '自訂順序', priceDesc: '價格高到低', priceAsc: '價格低到高' }, p.optionOrder) };
+  // 階段目標（前台顯示「第 N 階段：名稱」）：金額是累計的，由小到大
+  const stages = (p.stages || []).map((x) => ({ ...x })), stageBox = h('div');
+  const drawStages = () => stageBox.replaceChildren(...stages.map((x, i) => { const n = inp(x.name, { placeholder: `第${i + 1}階段名稱` }), g = inp(x.goal, { type: 'number', placeholder: '累計金額' }); n.addEventListener('input', () => { x.name = n.value; }); g.addEventListener('input', () => { x.goal = g.value; }); return h('div', { class: 'row' }, h('b', {}, `第${i + 1}階段`), n, g, h('button', { class: 'btn sm danger', on: { click: () => { stages.splice(i, 1); drawStages(); } } }, '刪除')); }),
+    stages.length < 6 ? h('button', { class: 'btn sm ghost', on: { click: () => { stages.push({ name: '', goal: '' }); drawStages(); } } }, '＋ 新增階段') : null);
+  drawStages();
   const save = h('button', { class: 'btn big', on: { click: async () => {
     const b = {}; for (const [k, e] of Object.entries(F)) b[k] = e.getValue ? e.getValue() : e.value;
+    b.stages = stages.filter((x) => x.name && Number(x.goal) > 0).map((x) => ({ name: x.name, goal: Number(x.goal) }));
     b.goal = Number(b.goal); b.ageLimit = Number(b.ageLimit);
     if (await act(() => api(`/api/c/${p.id}/project`, b), '計畫已儲存')) go(`/c/${p.id}/edit`, true);
   } } }, '儲存');
@@ -56,6 +63,7 @@ route('/c/:pid/edit', async (x) => shell(pidOf(x), 'edit', (d) => {
     h('section', { class: 'card' }, h('h2', {}, '封面照片'), field('封面照片（圖片、GIF 或短影片）', F.cover)),
     h('section', { class: 'card' }, h('h2', {}, '標題與內容'), field('計畫名稱', F.title), field('計畫簡介', F.description), field('計畫內容', F.content)),
     h('section', { class: 'card' }, h('h2', {}, '專案時程與目標'), L ? h('p', { class: 'warn' }, '方案與回饋已通過審核：目標、時間已鎖定') : null, h('div', { class: 'grid3' }, field('計畫目標', F.goal), field('預計開始時間 (UTC+8)', F.startAt), field('預計結束時間 (UTC+8)', F.endAt)), h('p', { class: 'small muted' }, '一次性計畫最短 1 天、最長 5 個月；訂閱式可以不填結束時間。')),
+    h('section', { class: 'card' }, h('h2', {}, '執行人與階段目標'), h('div', { class: 'grid2' }, field('執行人（實際執行的廟／單位）', F.executor), field('執行人連結', F.executorUrl)), h('p', { class: 'small muted' }, '階段目標：金額是「累計」的，例如第1階段 154,000、第2階段 600,000。沒設就用計畫目標當一個階段。'), stageBox),
     h('section', { class: 'card' }, h('h2', {}, '分類與網址'), h('div', { class: 'grid3' }, field('集資種類', F.type), field('年齡限制', F.ageLimit), field('分類', F.category), field('品牌發源地', F.origin), field('專案網址', F.slug, '/p/這個網址'))),
     h('section', { class: 'card' }, h('h2', {}, '影片與連結'), field('影片網址', F.video)),
     h('section', { class: 'card' }, h('h2', {}, '承諾與告示'), field('客服聯絡方式', F.contact), field('風險與挑戰', F.risk), field('退換貨規則', F.returns), field('AFTEE 支付相關宣告', F.afteeNote)),
@@ -82,9 +90,9 @@ route('/c/:pid/options', async (x) => shell(pidOf(x), 'options', async (d) => {
 async function optionForm(pid, oid) {
   const list = await api(`/api/c/${pid}/options`), o = oid ? list.find((y) => y.id === oid) : null;
   if (oid && !o) throw new Error('找不到這個回饋');
-  const v = o || { name: '', seoName: '', price: '', retail: '', limit: 0, addonOnly: false, atm: true, installment: 0, coupon: true, media: [], seoImage: '', description: '', shipMonth: '', hasNote: false, noteRequired: false, code: '', survey: [], shipping: { TW: 0 }, stores: [], noteToBacker: '' };
+  const v = o || { custom: false, name: '', seoName: '', price: '', retail: '', limit: 0, addonOnly: false, atm: true, installment: 0, coupon: true, media: [], seoImage: '', description: '', shipMonth: '', hasNote: false, noteRequired: false, code: '', survey: [], shipping: { TW: 0 }, stores: [], noteToBacker: '' };
   const F = { name: inp(v.name, { placeholder: '超早鳥單入組' }), seoName: inp(v.seoName), price: inp(v.price, { type: 'number', placeholder: '500' }), retail: inp(v.retail, { type: 'number', placeholder: '500' }), limit: inp(v.limit, { type: 'number', placeholder: '0' }),
-    addonOnly: chk(v.addonOnly), atm: chk(v.atm), installment: sel({ 0: '- 選擇分期期數 -', 3: '3', 6: '6' }, String(v.installment)), coupon: chk(v.coupon), seoImage: mediaInput(v.seoImage), description: editor(v.description, { rows: 8 }), shipMonth: inp(v.shipMonth, { type: 'month' }),
+    custom: chk(!!v.custom), addonOnly: chk(v.addonOnly), atm: chk(v.atm), installment: sel({ 0: '- 選擇分期期數 -', 3: '3', 6: '6' }, String(v.installment)), coupon: chk(v.coupon), seoImage: mediaInput(v.seoImage), description: editor(v.description, { rows: 8 }), shipMonth: inp(v.shipMonth, { type: 'month' }),
     hasNote: chk(v.hasNote), noteRequired: chk(v.noteRequired), code: inp(v.code), noteToBacker: area(v.noteToBacker, 4) };
   // 圖片（可以多張、可以放 GIF 或影片）
   let mediaList = (v.media || []).slice();
@@ -110,7 +118,7 @@ async function optionForm(pid, oid) {
   };
   return h('div', {}, h('h1', {}, oid ? '編輯贊助選項' : '增加贊助選項'), o && o.taken ? h('p', { class: 'warn' }, `已經有 ${o.taken} 份贊助：價格不能改、不能刪除`) : null,
     h('section', { class: 'card' }, field('回饋方案名稱', F.name), field('商品名稱（用於 SEO）', F.seoName), h('div', { class: 'grid3' }, field('價格', F.price), field('預定售價', F.retail), field('限量（0＝不限）', F.limit)),
-      field('加購選項，不顯示於計畫頁面', F.addonOnly), field('可以使用虛擬帳號轉帳或臨櫃繳款', F.atm, '轉帳付款在訂單成立當日隔一天的 23:59:59 之前付款皆可過單，因此限量產品建議不開放。'), field('可使用信用卡分期付款', F.installment), field('可以使用折扣碼', F.coupon)),
+      field('自由樂捐（信眾自己填金額；上面的價格＝最低金額）', F.custom), field('加購選項，不顯示於計畫頁面', F.addonOnly), field('可以使用虛擬帳號轉帳或臨櫃繳款', F.atm, '轉帳付款在訂單成立當日隔一天的 23:59:59 之前付款皆可過單，因此限量產品建議不開放。'), field('可使用信用卡分期付款', F.installment), field('可以使用折扣碼', F.coupon)),
     h('section', { class: 'card' }, h('h3', {}, '圖片（可以放 GIF 或影片，第一個當主圖）'), mediaBox, field('商品主圖（用於 SEO）', F.seoImage)),
     h('section', { class: 'card' }, field('選項內容', F.description), field('預計出貨日期', F.shipMonth)),
     h('section', { class: 'card' }, h('h3', {}, '使用者備註'), field('開啟備註欄', F.hasNote), field('將備註欄設定為必填', F.noteRequired), field('隱藏選項密碼（填了就只有輸入密碼的人看得到）', F.code)),

@@ -9,33 +9,37 @@ export function projectCard(p) {
   return h('article', { class: 'pcard' },
     link('/p/' + p.slug, [p.cover ? media({ url: p.cover }, 'cover') : h('div', { class: 'cover ph' }, p.title.slice(0, 2)), h('span', { class: 'ptype' }, p.typeName)], 'pcover'),
     h('div', { class: 'pbody' },
-      h('div', { class: 'pmeta' }, `${p.category}・${p.owner}`),
+      h('div', { class: 'pmeta' }, `${p.typeName}・${p.executor || p.owner}`),
       link('/p/' + p.slug, p.title, 'ptitle'), h('p', { class: 'pdesc' }, p.description),
-      p.type === 'subscription' ? h('div', { class: 'pnum' }, h('b', {}, money(p.monthly) + ' / 每月'), h('span', {}, '長期訂閱')) : [bar, h('div', { class: 'pnum' }, h('b', {}, money(p.raised)), h('span', {}, p.status === 'live' ? p.left : p.statusName), h('span', { class: 'pct' }, p.percent + '%'))]));
+      p.type === 'subscription' ? h('div', { class: 'pnum' }, h('b', {}, money(p.monthly) + ' / 每月'), h('span', {}, '長期訂閱')) : [p.stage && p.stage.total > 1 ? h('div', { class: 'small muted' }, `第${p.stage.n}階段：${p.stage.name}`) : null, bar, h('div', { class: 'pnum' }, h('b', {}, money(p.raised)), h('span', {}, p.status === 'live' ? p.left : p.statusName), h('span', { class: 'pct' }, (p.stage ? p.stage.percent : p.percent) + '%'))]));
 }
 const grid = (list, empty = '目前沒有計畫') => (list.length ? h('div', { class: 'grid' }, list.map(projectCard)) : h('p', { class: 'muted' }, empty));
 
 // ---------- 首頁 ----------
 route('/', async () => {
   const d = await api('/api/home');
-  const hero = d.featured[0];
-  const sec = (title, more, list, empty) => h('section', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', {}, title), more ? link(more, '查看更多 ›') : null), grid(list, empty));
-  // 主打：大圖＋金額、達成率（其他主打、精選放在下面「熱門計畫」）
-  const heroBox = hero ? h('section', { class: 'hero' },
-    link('/p/' + hero.slug, hero.cover ? media({ url: hero.cover }, 'cover') : h('div', { class: 'cover ph big' }, hero.title.slice(0, 4)), 'hero-img'),
-    h('div', { class: 'hero-txt' }, h('span', { class: 'pill' }, hero.type === 'subscription' ? '長期訂閱' : hero.left), h('h1', {}, hero.title), h('p', {}, hero.description),
-      h('div', { class: 'hero-num' }, money(hero.raised)), h('div', { class: 'hero-sub' }, hero.type === 'subscription' ? '本月累計' : `已達成 ${hero.percent}%・目標 ${money(hero.goal)}`),
-      link('/p/' + hero.slug, '查看計畫', 'btn big'))) : null;
-  const hot = d.featured.slice(1).concat(d.picks.filter((p) => !d.featured.some((f) => f.slug === p.slug))).slice(0, 6);
-  return h('div', {}, heroBox,
-    hot.length ? sec('熱門計畫', '/explore?sort=raised', hot) : null,
-    d.crowd.length ? sec('群眾集資', '/explore?type=crowd', d.crowd) : null,
-    d.preorder.length ? sec('預購專案', '/explore?type=preorder', d.preorder) : null,
-    d.subscription.length ? sec('訂閱專案', '/explore?type=subscription', d.subscription) : null,
-    d.updates.length ? h('section', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', {}, '最新計畫動態')), h('ul', { class: 'updates-list' }, d.updates.map((u) => h('li', {}, link('/p/' + u.slug + '?tab=updates', `${u.project}｜${u.title}`), h('span', { class: 'muted small' }, ago(u.at)))))) : null,
-    d.success.length ? sec('成功計畫', '/explore?status=success', d.success) : null,
-    h('section', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', {}, '探索分類')), h('div', { class: 'cats' }, d.categories.map((c) => link('/explore?category=' + encodeURIComponent(c), c, 'chip')))));
+  // 公司自己經營的護持平台（KIRK：「像是手手公益那種形式」）：品牌主視覺 → 焦點專案 → 護持進行中（一列一個，大圖＋說明＋階段）→ 歷年專案 → 回饋牆 → 初心
+  const focus = d.featured.length ? d.featured : d.live.slice(0, 3);
+  return h('div', { class: 'home' },
+    h('section', { class: 'banner' }, h('div', { class: 'banner-in' }, h('p', { class: 'banner-kicker' }, '人生地圖募資'), h('h1', {}, '陪在地廟宇，', h('br'), '把香火與文化傳下去'), h('p', {}, '每一份護持，都會回到廟裡。我們和廟方一起規劃、一起執行，進度與款項用途全部公開。'),
+      h('div', { class: 'row' }, link('/explore', '看所有護持專案', 'btn big'), link('/#story', '人生地圖初心', 'btn big ghost-w')))),
+    focus.length ? h('section', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', {}, '焦點專案')), h('div', { class: 'focus' }, focus.map((p) => link('/p/' + p.slug, [p.cover ? media({ url: p.cover }, 'cover') : h('div', { class: 'cover ph' }, p.title.slice(0, 2)), h('div', { class: 'focus-t' }, h('b', {}, p.title), h('span', {}, '瞭解更多 ›'))], 'focus-card')))) : null,
+    h('section', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', {}, '護持進行中'), link('/explore', '觀看所有專案 ›')), d.live.length ? h('div', { class: 'rows' }, d.live.map(projectRow)) : h('p', { class: 'muted' }, '目前沒有進行中的專案')),
+    d.updates.length ? h('section', { class: 'sec' }, h('div', { class: 'sec-h' }, h('h2', {}, '最新進度')), h('ul', { class: 'updates-list' }, d.updates.map((u) => h('li', {}, link('/p/' + u.slug + '?tab=updates', `${u.project}｜${u.title}`), h('span', { class: 'muted small' }, ago(u.at)))))) : null,
+    d.archive.length ? h('section', { class: 'sec', id: 'archive' }, h('div', { class: 'sec-h' }, h('h2', {}, '歷年專案'), link('/explore?status=success', '觀看所有歷年專案 ›')), grid(d.archive)) : null,
+    d.wall.length ? h('section', { class: 'sec', id: 'wall' }, h('div', { class: 'sec-h' }, h('h2', {}, '愛心回饋牆')), h('div', { class: 'wall' }, d.wall.map((w) => h('figure', { class: 'wall-card' }, w.tag ? h('span', { class: 'pill' }, w.tag) : null, h('blockquote', {}, w.text), h('figcaption', {}, '— ' + w.who))))) : null,
+    h('section', { class: 'sec story', id: 'story' }, h('div', { class: 'sec-h' }, h('h2', {}, '人生地圖初心')), h('div', { class: 'story-in' }, markup(d.about || '人生地圖由麥睿資訊經營，陪著台灣各地的廟宇，把香火、信仰與在地文化，帶到更多人面前。\n\n我們相信，**每一份護持都應該被看見**：款項用在哪裡、工程做到哪裡、回饋何時寄出，都會在專案頁持續更新。\n\n想替你熟悉的廟宇發起專案？歡迎填寫[宮廟合作申請](/inquiry)，我們會主動與你聯繫。'))));
 });
+/** 「護持進行中」的一列：大圖、標題、說明、階段目標、倒數、馬上護持（手手公益的排法） */
+function projectRow(p) {
+  const st = p.stage, sub = p.type === 'subscription';
+  return h('article', { class: 'prow' },
+    link('/p/' + p.slug, p.cover ? media({ url: p.cover }, 'cover') : h('div', { class: 'cover ph' }, p.title.slice(0, 2)), 'prow-img'),
+    h('div', { class: 'prow-txt' }, h('div', { class: 'pmeta' }, `${p.typeName}・執行：${p.executor || p.owner}`), link('/p/' + p.slug, p.title, 'prow-title'), h('p', { class: 'pdesc' }, p.description),
+      sub ? h('div', { class: 'stage' }, h('b', {}, money(p.monthly)), h('span', {}, '本月護持・長期訂閱'))
+        : st ? [h('div', { class: 'stage' }, h('span', { class: 'stage-pct' }, st.percent + '%'), h('span', {}, `第${st.n}階段：${st.name}`), h('span', { class: 'muted' }, p.left)), h('div', { class: 'progress' }, h('i', { style: { width: Math.min(100, st.percent) + '%' } }))] : null,
+      link('/p/' + p.slug, '馬上護持 ›', 'btn')));
+}
 
 // ---------- 探索 ----------
 route('/explore', async (_, q) => {
@@ -46,7 +50,7 @@ route('/explore', async (_, q) => {
   const apply = (page = 1) => { const n = new URLSearchParams(); if (kw.value) n.set('q', kw.value); if (type.value) n.set('type', type.value); if (cat.value) n.set('category', cat.value); if (status.value) n.set('status', status.value); if (sort.value) n.set('sort', sort.value); if (page > 1) n.set('page', page); go('/explore?' + n.toString()); };
   for (const e of [type, cat, status, sort]) e.addEventListener('change', () => apply());
   const pages = Math.ceil(d.total / d.per);
-  return h('div', {}, h('h1', {}, '探索計畫'), h('form', { class: 'filters', on: { submit: (e) => { e.preventDefault(); apply(); } } }, kw, type, cat, status, sort, h('button', { class: 'btn' }, '搜尋')),
+  return h('div', {}, h('h1', {}, '護持專案'), h('form', { class: 'filters', on: { submit: (e) => { e.preventDefault(); apply(); } } }, kw, type, cat, status, sort, h('button', { class: 'btn' }, '搜尋')),
     h('p', { class: 'muted small' }, `共 ${d.total} 個計畫`), grid(d.list, '找不到符合的計畫'),
     pages > 1 ? h('div', { class: 'pager' }, Array.from({ length: pages }, (_, i) => h('button', { class: 'btn ' + (i + 1 === d.page ? '' : 'ghost'), on: { click: () => apply(i + 1) } }, String(i + 1)))) : null);
 });
@@ -58,11 +62,17 @@ route('/p/:slug', async ({ slug }, q) => {
   const tab = q.tab || 'story';
   const T = (k, label) => link(`/p/${slug}?tab=${k}${q.code ? '&code=' + encodeURIComponent(q.code) : ''}`, label, 'tab' + (tab === k ? ' on' : ''));
   const followBtn = h('button', { class: 'btn ghost', on: { click: async () => { if (!state.me) return go('/login?next=/p/' + slug); const r = await act(() => api(`/api/p/${slug}/follow`, {}), ''); if (r) { followBtn.textContent = r.following ? '✓ 追蹤中' : '☆ 追蹤計畫'; toast(r.following ? '已追蹤' : '已取消追蹤'); } } } }, p.following ? '✓ 追蹤中' : '☆ 追蹤計畫');
-  const share = h('button', { class: 'btn ghost', on: { click: async () => { try { await navigator.clipboard.writeText(location.origin + '/p/' + slug); toast('已複製網址'); } catch { toast('複製失敗', 'err'); } } } }, '分享');
-  const contact = h('button', { class: 'btn ghost', on: { click: () => contactCreator(p, slug) } }, '聯繫提案人');
+  const share = h('button', { class: 'btn ghost', on: { click: async () => { try { await navigator.clipboard.writeText(location.origin + '/p/' + slug); toast('已複製網址'); } catch { toast('複製失敗', 'err'); } } } }, '複製網址');
+  const pageUrl = encodeURIComponent(location.origin + '/p/' + slug);
+  const shareFb = h('a', { href: 'https://www.facebook.com/sharer/sharer.php?u=' + pageUrl, target: '_blank', rel: 'noopener noreferrer', class: 'btn ghost' }, 'Facebook');
+  const shareLine = h('a', { href: 'https://social-plugins.line.me/lineit/share?url=' + pageUrl, target: '_blank', rel: 'noopener noreferrer', class: 'btn ghost' }, 'LINE');
+  const contact = h('button', { class: 'linkbtn', on: { click: () => contactCreator(p, slug) } }, '聯繫我們');
   const report = h('button', { class: 'linkbtn', on: { click: () => reportBox('project', p.id) } }, '檢舉計畫');
   let body;
-  if (tab === 'updates') body = p.updates.length ? p.updates.map((u) => h('article', { class: 'card' }, h('div', { class: 'muted' }, `${u.category}｜${dt(u.at)}${u.private ? '｜贊助人限定' : ''}`), h('h3', {}, u.title), u.cover ? media({ url: u.cover }) : null, u.locked ? h('p', { class: 'lock' }, '🔒 這則更新只有特定回饋的贊助人看得到') : markup(u.content))) : h('p', { class: 'muted' }, '還沒有計畫更新');
+  const follow = p.updates.filter((u) => u.category === '結案追蹤'), normal = p.updates.filter((u) => u.category !== '結案追蹤');
+  const upList = (list, empty) => list.length ? list.map((u) => h('article', { class: 'card' }, h('div', { class: 'muted' }, `${u.category}｜${dt(u.at)}${u.private ? '｜贊助人限定' : ''}`), h('h3', {}, u.title), u.cover ? media({ url: u.cover }) : null, u.locked ? h('p', { class: 'lock' }, '🔒 這則更新只有特定回饋的贊助人看得到') : markup(u.content))) : h('p', { class: 'muted' }, empty);
+  if (tab === 'followups') body = upList(follow, '專案結束後，款項用途、工程與回饋寄送的成果會在這裡公開');
+  else if (tab === 'updates') body = normal.length ? upList(normal, '') : h('p', { class: 'muted' }, '還沒有專案更新');
   else if (tab === 'comments') body = comments(p, slug);
   else if (tab === 'faqs') body = p.faqs.length ? h('div', {}, p.faqs.map((f) => h('details', { class: 'faq' }, h('summary', {}, f.q), h('p', {}, f.a)))) : h('p', { class: 'muted' }, '還沒有常見問答');
   else if (tab === 'backers') body = table(['贊助人', '金額', '時間'], p.backerList.map((b) => [b.name, money(b.amount), ago(b.at)]), '還沒有贊助人');
@@ -70,37 +80,42 @@ route('/p/:slug', async ({ slug }, q) => {
   const codeBox = p.hasHidden && !p.codeOk ? h('form', { class: 'card', on: { submit: (e) => { e.preventDefault(); go(`/p/${slug}?code=${encodeURIComponent(e.target.code.value.trim())}`); } } }, h('p', { class: 'muted' }, '有隱藏的回饋選項？輸入密碼看看'), h('input', { name: 'code', placeholder: '隱藏選項密碼' }), h('button', { class: 'btn ghost' }, '確定')) : null;
   const opts = p.options.map((o) => optionCard(p, o, slug, q.code));
   const sub = p.type === 'subscription';
-  const backBtn = h('button', { class: 'btn big full', on: { click: () => { const el = document.querySelector('.p-right'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } } }, sub ? '訂閱支持' : '贊助專案');
+  const backBtn = h('button', { class: 'btn big full', on: { click: () => { const el = document.querySelector('.p-right'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } } }, sub ? '訂閱護持' : '幫助支持');
+  const st = p.stage;
   return h('div', { class: 'project' },
     p.preview ? h('div', { class: 'warn' }, '預覽模式：這個計畫還沒公開，只有團隊和平台人員看得到') : null,
     p.ageLimit === 18 ? h('div', { class: 'warn' }, '本計畫含限制級內容，未滿 18 歲請勿瀏覽與贊助') : null,
-    h('header', { class: 'p-head' }, h('div', { class: 'pmeta' }, `${p.typeName}・${p.category}・提案人 `, link('/u/' + p.ownerSlug, p.owner)), h('h1', {}, p.title), h('p', {}, p.description)),
+    h('header', { class: 'p-head' }, h('div', { class: 'pmeta' }, `${p.typeName}・${p.category}`), h('h1', {}, p.title), h('p', {}, p.description)),
     h('div', { class: 'p-top' },
       h('div', { class: 'p-media' }, p.cover ? media({ url: p.cover }, 'cover') : h('div', { class: 'cover ph big' }, p.title.slice(0, 4))),
       h('div', { class: 'p-info' },
         sub ? [h('div', { class: 'big-num' }, money(p.monthly), h('small', {}, ' / 本月')), h('div', { class: 'p-goal' }, '每月定期護持')]
-          : [h('div', { class: 'big-num' }, money(p.raised)), h('div', { class: 'p-goal' }, `目標 ${money(p.goal)}`), h('div', { class: 'progress' }, h('i', { style: { width: Math.min(100, p.percent) + '%' } }))],
-        h('div', { class: 'p-stats' }, sub ? null : h('span', {}, '達成', h('b', {}, p.percent + '%')), h('span', {}, '贊助人數', h('b', {}, num(p.backers))), h('span', {}, sub ? '狀態' : '剩餘時間', h('b', {}, sub ? '長期訂閱' : p.status === 'live' ? p.left : p.statusName))),
-        h('div', { class: 'p-period' }, sub ? `${dt(p.startAt, false)} 開始・長期訂閱` : `募資期間 ${dt(p.startAt)} – ${dt(p.endAt)}`),
+          : st ? [h('div', { class: 'stage-box' }, h('div', { class: 'small muted' }, `第${st.n}階段目標`), h('div', { class: 'stage-name' }, st.name), h('div', { class: 'stage-big' }, st.percent + '%'), h('div', { class: 'progress' }, h('i', { style: { width: Math.min(100, st.percent) + '%' } })), h('div', { class: 'small muted' }, `已護持 ${money(p.raised)}・本階段目標 ${money(st.goal)}`)),
+            st.total > 1 ? h('ol', { class: 'stage-list' }, st.list.map((x) => h('li', { class: x.done ? 'done' : x.n === st.n ? 'now' : '' }, `第${x.n}階段：${x.name}`, h('span', {}, money(x.goal))))) : null] : null,
+        h('div', { class: 'p-stats' }, h('span', {}, '贊助人數', h('b', {}, num(p.backers))), h('span', {}, sub ? '狀態' : '剩餘時間', h('b', {}, sub ? '長期訂閱' : p.status === 'live' ? p.left : p.statusName))),
+        h('div', { class: 'p-period' }, sub ? `專案時間 ${dt(p.startAt, false)} 起・長期訂閱` : `專案時間 ${dt(p.startAt, false)} ~ ${dt(p.endAt, false)}`),
+        p.executor ? h('div', { class: 'p-exec' }, '執行人　', p.executorUrl ? h('a', { href: p.executorUrl, target: '_blank', rel: 'noopener noreferrer nofollow' }, p.executor) : h('b', {}, p.executor)) : null,
         p.status === 'live' ? backBtn : null,
-        h('div', { class: 'p-actions' }, followBtn, share, contact),
+        h('div', { class: 'p-actions' }, followBtn, shareFb, shareLine),
+        h('div', { class: 'row small' }, share, contact),
         p.canManage ? link(`/c/${p.id}`, '管理計畫後台', 'btn dark full') : null)),
-    h('div', { class: 'tabs-bar' }, h('nav', { class: 'tabs' }, T('story', '專案內容'), T('updates', `計畫更新 ${p.updates.length}`), T('comments', `留言 ${p.comments.length}`), T('faqs', `常見問答 ${p.faqs.length}`), T('backers', `贊助人 ${num(p.backers)}`))),
+    h('div', { class: 'tabs-bar' }, h('nav', { class: 'tabs' }, T('story', '專案內容'), T('updates', `專案更新 ${normal.length}`), T('comments', `留言 ${p.comments.length}`), T('faqs', `常見問答 ${p.faqs.length}`), T('followups', '結案追蹤'), T('backers', `贊助人 ${num(p.backers)}`))),
     h('div', { class: 'p-main' },
       h('div', { class: 'p-left' }, body, h('div', { class: 'tr' }, report)),
-      h('aside', { class: 'p-right' }, h('h3', {}, sub ? '選擇訂閱方案' : '選擇回饋方案'), codeBox, opts.length ? opts : h('p', { class: 'muted' }, '提案人還沒設定回饋'))));
+      h('aside', { class: 'p-right' }, h('h3', {}, sub ? '選擇訂閱方案' : '選擇護持方案'), codeBox, opts.length ? opts : h('p', { class: 'muted' }, '提案人還沒設定回饋'))));
 });
 function optionCard(p, o, slug, code) {
   const soldOut = o.left === 0, canBack = p.status === 'live' && !soldOut;
   const go2 = () => { if (!state.me) return go(`/login?next=${encodeURIComponent(`/p/${slug}/checkout?option=${o.id}${code ? '&code=' + code : ''}`)}`); go(`/p/${slug}/checkout?option=${o.id}${code ? '&code=' + encodeURIComponent(code) : ''}`); };
   return h('div', { class: 'ocard' + (canBack ? ' can' : ''), on: { click: () => { if (canBack) go2(); } } },
     o.media.length ? h('div', { class: 'omedia' }, o.media.map((m) => media(m))) : null,
-    h('div', { class: 'oprice' }, money(o.price), o.retail > o.price ? h('s', { class: 'muted' }, money(o.retail)) : null, p.type === 'subscription' ? h('small', {}, ' / 每月') : null),
+    h('div', { class: 'oprice' }, o.custom ? '自訂金額' : money(o.price), !o.custom && o.retail > o.price ? h('s', { class: 'muted' }, money(o.retail)) : null, p.type === 'subscription' ? h('small', {}, ' / 每月') : null, o.custom && o.price ? h('small', {}, `（${money(o.price)} 起）`) : null),
     h('h4', {}, o.name, o.hidden ? badge('隱藏選項', 'gold') : null),
-    h('div', { class: 'ometa' }, h('span', {}, h('b', {}, num(o.taken)), ' 人已贊助'), o.left !== null ? h('span', {}, `剩 ${num(o.left)} 份`) : null, o.shipMonth ? h('span', {}, `預計 ${o.shipMonth.replace('-', ' 年 ')} 月寄出`) : null),
+    h('div', { class: 'ometa' }, h('span', {}, h('b', {}, num(o.taken)), ' 人已支持'), o.left !== null ? h('span', {}, `剩餘 ${num(o.left)} 份`) : null),
     markup(o.description),
     h('div', { class: 'small muted' }, [o.atm ? '可 ATM 轉帳' : '', o.installment ? `信用卡可分 ${o.installment} 期` : '', o.stores.length ? '可超商取貨' : ''].filter(Boolean).join('・')),
-    soldOut ? badge('已額滿', 'gray') : p.status === 'live' ? h('button', { class: 'btn full' }, p.type === 'subscription' ? '訂閱這個方案' : '贊助這個回饋') : badge(p.statusName || '未開放', 'gray'));
+    o.shipMonth ? h('div', { class: 'small muted' }, `預計於 ${o.shipMonth.replace('-', ' 年 ')} 月實現`) : null,
+    soldOut ? badge('已額滿', 'gray') : p.status === 'live' ? h('button', { class: 'btn full' }, '幫助支持') : badge(p.statusName || '未開放', 'gray'));
 }
 function comments(p, slug) {
   const top = p.comments.filter((c) => !c.parentId), kids = (id) => p.comments.filter((c) => c.parentId === id);
@@ -112,7 +127,7 @@ function comments(p, slug) {
 }
 function contactCreator(p, slug) {
   if (!state.me) return go('/login?next=/p/' + slug);
-  const t = area('', 5); modal('聯繫提案人：' + p.owner, field('訊息內容', t), [{ text: '送出', fn: async () => !!(await act(() => api('/api/inbox', { slug, body: t.value }), '已送出，可以在站內訊息看回覆')) }]);
+  const t = area('', 5); modal('聯繫我們：' + p.title, field('訊息內容', t), [{ text: '送出', fn: async () => !!(await act(() => api('/api/inbox', { slug, body: t.value }), '已送出，可以在站內訊息看回覆')) }]);
 }
 async function reportBox(kind, id) {
   if (!state.me) return go('/login');
@@ -138,6 +153,8 @@ route('/p/:slug/checkout', async ({ slug }, q) => {
   // 1. 回饋與數量
   const qtyIn = (o) => { const e = h('input', { type: 'number', min: o.addonOnly ? 0 : 1, max: o.left ?? 99, value: qty[o.id], class: 'qty', on: { change: () => { qty[o.id] = Math.max(o.addonOnly ? 0 : 1, Math.min(99, Number(e.value) || 0)); e.value = qty[o.id]; quote(); } } }); if (p.type === 'subscription') e.disabled = true; return e; };
   const bonusIn = inp('0', { type: 'number', min: 0, on: { change: () => { S.bonus = Math.max(0, Math.floor(Number(bonusIn.value) || 0)); quote(); } } });
+  // 自由樂捐：金額＝方案最低金額＋加碼（伺服器照一般加碼算，不用另外一套）
+  const freeIn = inp(String(main.price || 100), { type: 'number', min: main.price || 1, on: { change: () => { const v = Math.max(main.price || 1, Math.floor(Number(freeIn.value) || 0)); freeIn.value = v; S.bonus = v - main.price; quote(); } } });
   const couponIn = inp('', { placeholder: '折扣碼' });
   // 2. 寄送
   const region = sel(state.meta.countries, 'TW', { on: { change: () => { S.region = region.value; quote(); renderDelivery(); } } });
@@ -178,9 +195,9 @@ route('/p/:slug/checkout', async ({ slug }, q) => {
   return h('div', { class: 'checkout' }, h('h1', {}, '贊助：' + p.title),
     h('div', { class: 'co-grid' },
       h('div', {},
-        h('section', { class: 'card' }, h('h3', {}, '1. 回饋與數量'), h('div', { class: 'co-item' }, h('b', {}, main.name), ' ', money(main.price), ' × ', qtyIn(main)),
+        h('section', { class: 'card' }, h('h3', {}, '1. 護持方案'), main.custom ? [h('div', { class: 'co-item' }, h('b', {}, main.name)), field(`護持金額（${money(main.price)} 起）`, freeIn)] : h('div', { class: 'co-item' }, h('b', {}, main.name), ' ', money(main.price), ' × ', qtyIn(main)),
           p.addons.length ? h('div', {}, h('h4', {}, '加購'), p.addons.map((a) => h('div', { class: 'co-item' }, a.name, ' ', money(a.price), ' × ', qtyIn(a)))) : null,
-          p.type === 'subscription' ? null : field('加碼贊助（選填，不另外寄回饋）', bonusIn),
+          p.type === 'subscription' || main.custom ? null : field('加碼護持（選填，不另外寄回饋）', bonusIn),
           main.coupon ? h('div', { class: 'row' }, couponIn, h('button', { class: 'btn ghost', on: { click: async () => { S.coupon = couponIn.value.trim(); const a = await quote(); if (a && a.discount) toast('折扣碼可以用'); } } }, '套用')) : null),
         h('section', { class: 'card' }, h('h3', {}, '2. 收件資料'), field('寄送地區', region), deliveryBox, h('div', { class: 'grid3' }, field('收件人姓名', R.name), field('電話', R.phone), field('Email', R.email))),
         h('section', { class: 'card' }, h('h3', {}, '3. 回饋調查與備註'), surveyBox, main.hasNote ? field('備註' + (main.noteRequired ? '（必填）' : ''), note) : null),
@@ -288,20 +305,15 @@ route('/me/inbox/:uid', async ({ uid }) => {
     h('div', { class: 'card' }, t, h('button', { class: 'btn', on: { click: async () => { if (await act(() => api('/api/inbox', { toId: Number(uid), body: t.value }), '已送出')) go('/me/inbox/' + uid, true); } } }, '送出')));
 });
 
-// ---------- 發起計畫 ----------
-route('/start', async () => {
-  const pick = async (type) => { if (!state.me) return go('/login?next=/start'); const title = await ask('發起計畫', '計畫名稱（之後可以改）'); if (title === undefined) return; const r = await act(() => api('/api/start', { type, title }), '已建立草稿'); if (r) go(`/c/${r.id}`); };
-  const card3 = (type, name, sub, points) => h('div', { class: 'card start-card' }, h('h3', {}, name), h('p', {}, sub), h('ul', {}, points.map((x) => h('li', {}, '✓ ' + x))), h('button', { class: 'btn full', on: { click: () => pick(type) } }, '開始提案'));
-  return h('div', {}, h('section', { class: 'hero plain' }, h('h1', {}, '替你熟悉的廟宇發起計畫'), h('p', {}, '選一種計畫類型開始。建立草稿不用錢，我們的專案人員會陪你把內容、回饋、審核一步步完成。')),
-    h('div', { class: 'grid3' }, card3('crowd', '群眾集資', '在一定期限內，募集完成計畫所需的資金', ['一次型專案', '建議集資 35～45 天', '專案達成後，一次性回饋贊助者']), card3('preorder', '預購專案', '讓新產品在上市前進行集客預購', ['一次型專案', '平均集資 45～60 天', '專案達成後，一次性回饋贊助者']), card3('subscription', '訂閱專案', '用持續性的計畫，累積每月的贊助', ['長期型專案', '可持續集資到專案結束', '專案進行期間，持續回饋贊助者'])),
-    h('section', { class: 'card' }, h('h2', {}, '常見問答'), [
-      ['發起募資有什麼身分限制？', '提案人須為本國自然人，或在臺灣註冊的法人、機關團體。'],
-      ['集資目標有限制嗎？', '自然人：任意連續 30 天內上限 100 萬；法人：第一階段上限 1,500 萬。'],
-      ['集資時間有限制嗎？', '一次性計畫最短 1 天、最長 5 個月，建議 35～45 天；訂閱專案沒有天期限制。'],
-      ['為什麼要經過審核？', '提案後依序經過：商業檔案與金流帳號初審 → 方案與回饋 → 合約簽署與上傳 → 第三方金流單位審核 → 準備上線。審核通過不代表背書，提案人仍須負擔專案責任。'],
-      ['發起計畫要付錢嗎？', '不用。集資成功才收：平台手續費 5.5%＋金流基本服務費 2.5%（依付款方式可能不同）。'],
-      ['什麼時候拿到款項？', '群眾集資、預購式：專案完結後 28 個工作日內撥款；訂閱專案：次月 15 日撥款。'],
-    ].map(([q, a]) => h('details', { class: 'faq' }, h('summary', {}, q), h('p', {}, a)))));
+// ---------- 宮廟合作申請（公司自己經營：外面的人不能直接提案，填表後由我們聯繫）----------
+route('/start', async () => { go('/inquiry', true); return h('div'); });
+route('/inquiry', async () => {
+  const F = { org: inp('', { placeholder: '例：○○宮' }), name: inp(''), phone: inp('', { inputmode: 'tel' }), email: inp('', { type: 'email' }), line: inp(''), content: area('', 6, { placeholder: '想募資的項目（修廟、法會、文物…）、大概的金額與時間、目前的狀況' }) };
+  const done = h('div', { class: 'card closed hidden' }, h('h2', {}, '已收到你的申請'), h('p', {}, '我們會在 3 個工作天內與你聯繫，謝謝你。'), link('/', '回首頁', 'btn'));
+  const form = h('form', { class: 'card', on: { submit: async (e) => { e.preventDefault(); const b = Object.fromEntries(Object.entries(F).map(([k, x]) => [k, x.value])); if (await act(() => api('/api/inquiry', b), '已送出')) { form.classList.add('hidden'); done.classList.remove('hidden'); } } } },
+    h('div', { class: 'grid2' }, field('宮廟（單位）名稱', F.org), field('聯絡人', F.name), field('電話', F.phone), field('Email', F.email), field('LINE ID（選填）', F.line)), field('想合作的內容', F.content), h('button', { class: 'btn big' }, '送出申請'));
+  return h('div', { class: 'narrow-l' }, h('section', { class: 'hero plain' }, h('h1', {}, '宮廟合作申請'), h('p', {}, '人生地圖募資由我們和廟方一起規劃、執行。想替廟宇發起護持專案，請留下聯絡方式，專人會跟你聯繫。')), form, done,
+    h('section', { class: 'card' }, h('h2', {}, '合作怎麼進行'), h('ol', { class: 'list' }, h('li', {}, '專人聯繫、了解需求與廟方狀況'), h('li', {}, '一起規劃專案內容、階段目標與護持方案'), h('li', {}, '平台上架、宣傳，募資期間定期更新進度'), h('li', {}, '專案結束後，款項用途與成果在「結案追蹤」公開'))));
 });
 
 // ---------- 登入、註冊 ----------

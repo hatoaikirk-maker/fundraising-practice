@@ -240,3 +240,58 @@ input.sm { min-height: 36px; padding: 4px 8px; width: 110px; } input.qty { width
   .grid { grid-template-columns: 1fr; }
   .big-num { font-size: 1.9rem; }
 }
+
+/* ==========================================================================
+   公司自己經營的護持平台（手手公益模式）：主視覺、焦點專案、護持進行中、階段目標、回饋牆、初心
+   ========================================================================== */
+.banner { margin: 0 -20px; background: linear-gradient(120deg, #2a1410 0%, #6e1f17 55%, #c8372d 100%); color: #fff; }
+.banner-in { max-width: 1200px; margin: 0 auto; padding: 72px 20px 64px; }
+.banner-kicker { letter-spacing: .3em; font-size: .86rem; opacity: .8; margin: 0 0 8px; }
+.banner h1 { font-size: 2.4rem; line-height: 1.35; margin: 0 0 14px; }
+.banner p { max-width: 560px; opacity: .92; margin: 0 0 24px; }
+.btn.ghost-w { background: transparent; border-color: rgba(255, 255, 255, .7); color: #fff; } .btn.ghost-w:hover { background: rgba(255, 255, 255, .12); color: #fff; }
+.focus { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.focus-card { position: relative; display: block; border-radius: 12px; overflow: hidden; color: #fff; }
+.focus-card .cover { border-radius: 0; transition: transform .4s; } .focus-card:hover .cover { transform: scale(1.03); }
+.focus-t { position: absolute; inset: auto 0 0 0; padding: 40px 18px 16px; background: linear-gradient(transparent, rgba(0, 0, 0, .75)); display: flex; flex-direction: column; gap: 4px; }
+.focus-t b { font-size: 1.05rem; line-height: 1.45; } .focus-t span { font-size: .86rem; opacity: .85; }
+.focus-card:hover { color: #fff; }
+.rows { display: flex; flex-direction: column; gap: 28px; }
+.prow { display: grid; grid-template-columns: 1.1fr 1fr; gap: 28px; align-items: center; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.prow:last-child { border-bottom: 0; }
+.prow-img { display: block; border-radius: 10px; overflow: hidden; } .prow-img .cover { border-radius: 0; transition: transform .35s; } .prow:hover .prow-img .cover { transform: scale(1.02); }
+.prow-txt { display: flex; flex-direction: column; gap: 10px; }
+.prow-title { font-size: 1.3rem; font-weight: 800; line-height: 1.45; color: var(--ink); }
+.prow .pdesc { -webkit-line-clamp: 4; font-size: .94rem; color: var(--ink2); }
+.prow .btn { align-self: flex-start; }
+.stage { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; font-size: .92rem; }
+.stage-pct { font-size: 1.6rem; font-weight: 800; color: var(--ac); }
+.stage-box { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 12px; }
+.stage-name { font-size: 1.15rem; font-weight: 800; } .stage-big { font-size: 2.4rem; font-weight: 800; color: var(--ac); line-height: 1.2; }
+.stage-box .progress { height: 8px; margin: 8px 0 6px; }
+.stage-list { list-style: none; padding: 0; margin: 0 0 12px; font-size: .88rem; }
+.stage-list li { display: flex; justify-content: space-between; padding: 6px 0 6px 22px; position: relative; color: var(--mute); border-bottom: 1px dashed var(--line); }
+.stage-list li::before { content: ""; position: absolute; left: 4px; top: 13px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid #ccc; }
+.stage-list li.done { color: var(--ink); } .stage-list li.done::before { background: var(--ac); border-color: var(--ac); }
+.stage-list li.now { color: var(--ink); font-weight: 700; } .stage-list li.now::before { border-color: var(--ac); }
+.p-exec { font-size: .92rem; color: var(--mute); margin-bottom: 10px; } .p-exec a { color: var(--ac); font-weight: 700; }
+.p-actions a.btn { text-decoration: none; }
+.wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.wall-card { margin: 0; background: var(--soft); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 8px; }
+.wall-card blockquote { margin: 0; font-size: .95rem; } .wall-card figcaption { color: var(--mute); font-size: .86rem; } .wall-card .pill { align-self: flex-start; }
+.story-in { max-width: 760px; font-size: 1.02rem; color: var(--ink2); }
+.narrow-l { max-width: 760px; margin: 0 auto; }
+@media (max-width: 900px) {
+  .banner-in { padding: 48px 20px 40px; } .banner h1 { font-size: 1.75rem; }
+  .prow { grid-template-columns: 1fr; gap: 14px; }
+  .top-nav { display: none; }   /* 手機：選單收在漢堡（下面）；頁首只留 Logo＋登入 */
+}
+@media (max-width: 520px) { .banner { margin: 0 -14px; } }
+.burger { display: none; min-width: 44px; min-height: 44px; border: 0; background: none; font-size: 1.4rem; cursor: pointer; color: var(--ink); }
+@media (max-width: 900px) {
+  .top-in { position: relative; }
+  .burger { display: inline-flex; align-items: center; justify-content: center; order: -1; margin-left: -10px; }
+  .top-nav.open { display: flex; flex-direction: column; position: absolute; top: 64px; left: 0; right: 0; background: #fff; border-bottom: 1px solid var(--line); box-shadow: var(--shadow); padding: 8px 20px 14px; gap: 0; }
+  .top-nav.open a { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .top-in .user, .top-auth { margin-left: auto; }
+}
